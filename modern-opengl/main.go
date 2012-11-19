@@ -90,7 +90,7 @@ func createBuffer() *glh.MeshBuffer {
 
 	// Create a mesh buffer with the given attributes.
 	mb := glh.NewMeshBuffer(
-		glh.RenderArrays,
+		glh.RenderBuffered,
 
 		// Indices.
 		glh.NewIndexAttr(1, gl.UNSIGNED_BYTE, gl.STATIC_DRAW),
