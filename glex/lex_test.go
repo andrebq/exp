@@ -75,7 +75,7 @@ func TestLexerLiteral(t *testing.T) {
 		t.Errorf("Unable to build the parser. Cause: %v", err)
 	}
 
-	must(t, l.NewRule("abba", 1), l.NewRule("c", 2), l.NewRule("d", 3), l.NewRule("\\s*", -1))
+	must(t, l.NewRule("abba", 1), l.NewRule("c", 2), l.NewRule("d", 3), l.NewRule("\\s+", -1))
 	expected := []Match{Match{"abba", 1}, Match{"c", 2}, Match{"d", 3}}
 	for _, m := range expected {
 		actual, err := l.Next()
