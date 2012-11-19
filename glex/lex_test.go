@@ -4,6 +4,19 @@ import (
 	"testing"
 )
 
+// Ensure that all errors are nil, if not,
+// log all of them into t
+func must(t *testing.T, errors ...error) (valid bool) {
+	valid = true
+	for _, e := range errors {
+		if e != nil {
+			valid = false
+			t.Errorf("Unexpected error: %v", e)
+		}
+	}
+	return
+}
+
 func TestRule(t *testing.T) {
 	r, err := NewRule("abba", 1)
 	if err != nil {
@@ -52,5 +65,25 @@ func TestRuleList(t *testing.T) {
 	}
 	if m.Text != "cba" {
 		t.Errorf("Expecting %v got %v", "cba", m.Text)
+	}
+}
+
+// Make sure that the lexer return the expected token's while scanning data
+func TestLexerLiteral(t *testing.T) {
+	l, err := NewLexer("abba c d")
+	if err != nil {
+		t.Errorf("Unable to build the parser. Cause: %v", err)
+	}
+
+	must(t, l.NewRule("abba", 1), l.NewRule("c", 2), l.NewRule("d", 3), l.NewRule("\\s*", -1))
+	expected := []Match{Match{"abba", 1}, Match{"c", 2}, Match{"d", 3}}
+	for _, m := range expected {
+		actual, err := l.Next()
+		if err != nil {
+			t.Errorf("Unexpected error while lexing... %v", err)
+		}
+		if m.Token != actual.Token {
+			t.Errorf("Expecting %v got %v", m, actual)
+		}
 	}
 }

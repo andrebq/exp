@@ -1,8 +1,10 @@
 package glex
 
 import (
+	"io/ioutil"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // Lexer errors
@@ -15,8 +17,9 @@ func (e Error) Error() string { return string(e) }
 func (e Error) String() string { return string(e) }
 
 const (
-	NoMatch = Error("No match was found in the list")
-	Eof     = Error("End of input")
+	NoMatch              = Error("No match was found in the list")
+	Eof                  = Error("End of input")
+	ErrInvalidUtf8String = Error("Input string isn't a valid UTF-8 sequence")
 )
 
 // Interface that define's a Match
@@ -108,4 +111,77 @@ func (l *RuleList) NewRule(exp string, token int) (*Rule, error) {
 	}
 	*l = append(*l, r)
 	return r, nil
+}
+
+// Hold the information to perform the lexical scanning
+// of a given input
+type Lexer struct {
+	rules     RuleList
+	fullInput string
+	current   string
+}
+
+// Create a new lexer from the given input string
+func NewLexer(input string) (*Lexer, error) {
+	if !utf8.ValidString(input) {
+		err := ErrInvalidUtf8String
+		return nil, err
+	}
+
+	return &Lexer{rules: make(RuleList, 0), fullInput: input, current: input}, nil
+}
+
+// Create a new lexer loading it's contents from the given file
+// file contents MUST BE valid UTF-8 strings.
+func NewLexerFromFile(file string) (*Lexer, error) {
+	data, err := ioutil.ReadFile(file)
+	if err != nil {
+		return nil, err
+	}
+
+	if !utf8.Valid(data) {
+		err = ErrInvalidUtf8String
+		return nil, err
+	}
+
+	input := string(data)
+	return &Lexer{rules: make(RuleList, 0), fullInput: input, current: input}, nil
+}
+
+// Try to find a match for the current input and move the cursor, if the returned token
+// is < 0, the input is consumed and the lexer tries to advance again.
+//
+// If not match is found, return's an error. Later the function IsEof can be used to check
+// if the error represent the end of input.
+func (l *Lexer) Next() (Match, error) {
+	for {
+		// this loop will consume input until it find's an error
+		// or a token >= 0.
+		m, tail, err := l.rules.Match(l.current)
+		if err == nil {
+			// move the cursor only if didn't found error
+			l.current = tail
+			if m.Token < 0 {
+				// search for anoter token
+				continue
+			}
+			return m, err
+		} else {
+			return emptyMatch, err
+		}
+	}
+	panic("not reached")
+	return emptyMatch, nil
+}
+
+// Return true only if the error is Eof
+func (l *Lexer) Eof(err error) bool {
+	return err == Eof
+}
+
+// Include a new rule into the lexer, same logic used
+// by RuleList
+func (l *Lexer) NewRule(exp string, token int) error {
+	_, err := l.rules.NewRule(exp, token)
+	return err
 }
