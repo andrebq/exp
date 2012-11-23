@@ -10,10 +10,20 @@ import (
 	"github.com/go-gl/glfw"
 	"github.com/go-gl/glh"
 	"github.com/go-gl/glu"
+	"github.com/andrebq/assimp"
+	"github.com/andrebq/assimp/conv"
+	"github.com/andrebq/gas"
 	"log"
 )
 
+var (
+	scene *assimp.Scene
+)
+
 func main() {
+	
+	loadMeshInfo()
+	
 	err := initGL()
 	if err != nil {
 		log.Printf("InitGL: %v", err)
@@ -21,6 +31,7 @@ func main() {
 	}
 
 	program := createSampleProgram()
+	_ = program
 
 	defer glfw.Terminate()
 
@@ -32,9 +43,9 @@ func main() {
 	for glfw.WindowParam(glfw.Opened) > 0 {
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 		gl.LoadIdentity()
-		//gl.translatef(0, 0, -6)
-		//gl.Rotatef(angle, 0, 1, 0)
-		program.Use()
+		gl.Translatef(0, 0, -20)
+		gl.Rotatef(angle, 1, 1, 1)
+		//program.Use()
 
 		// Render a solid cube at half the scale.
 		//gl.Scalef(0.2, 0.2, 0.2)
@@ -62,31 +73,9 @@ func main() {
 }
 
 func createBuffer() *glh.MeshBuffer {
-	// We create as few vertices as possible.
-	// Manually building a cube would require 24 vertices. Many of which
-	// are duplicates. All we have to define here, is the 8 unique ones
-	// necessary to construct each face of the cube.
-	pos := []float32{
-		0, 1, 0,
-		1, 0, 0,
-		-1, 0, 0,
-	}
-
-	// Each vertex comes with its own colour.
-	clr := []float32{
-		1, 1, 1, 0,
-		1, 1, 1, 0,
-		1, 1, 1, 0,
-	}
-
-	// These are the indices into the position and color lists.
-	// They tell the GPU which position/color pair to use in order to construct
-	// the whole cube. As can be seen, all elements are repeated multiple
-	// times to create the correct layout. For large meshes with many duplicate
-	// vertices, this can save a sizable amount of storage space.
-	idx := []byte{
-		0, 1, 2,
-	}
+	
+	assimp.RandomColor(scene.Mesh[0])
+	fmesh := assimp.NewFlatMesh(scene.Mesh[0])
 
 	// Create a mesh buffer with the given attributes.
 	mb := glh.NewMeshBuffer(
@@ -103,7 +92,7 @@ func createBuffer() *glh.MeshBuffer {
 	)
 
 	// Add the mesh to the buffer.
-	mb.Add(idx, pos, clr)
+	mb.Add(fmesh.ByteIndex, fmesh.Vertex, fmesh.Color)
 	return mb
 }
 
@@ -216,7 +205,15 @@ void main()
 		panic("Unable to link program. " + fshader.GetInfoLog())
 	}
 
-	program.Use()
+	//program.Use()
 	return program
 
+}
+
+
+func loadMeshInfo() {
+	path, err := gas.Abs("github.com/andrebq/assimp/data/cube.dae")
+	if err != nil { panic(err) }
+	
+	scene, err = conv.LoadAsset(path)
 }
