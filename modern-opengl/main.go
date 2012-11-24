@@ -6,24 +6,27 @@
 package main
 
 import (
+	"flag"
+	"github.com/andrebq/assimp"
+	"github.com/andrebq/assimp/conv"
+	"github.com/andrebq/gas"
 	"github.com/go-gl/gl"
 	"github.com/go-gl/glfw"
 	"github.com/go-gl/glh"
 	"github.com/go-gl/glu"
-	"github.com/andrebq/assimp"
-	"github.com/andrebq/assimp/conv"
-	"github.com/andrebq/gas"
 	"log"
 )
 
 var (
-	scene *assimp.Scene
+	scene    *assimp.Scene
+	meshFile = flag.String("if", "", "Sample cube")
 )
 
 func main() {
-	
+	flag.Parse()
+
 	loadMeshInfo()
-	
+
 	err := initGL()
 	if err != nil {
 		log.Printf("InitGL: %v", err)
@@ -55,16 +58,16 @@ func main() {
 		mb.Render(gl.TRIANGLES)
 		/*
 
-		// Render wireframe cubes, with incremental size.
-		gl.Disable(gl.COLOR_MATERIAL)
-		gl.Disable(gl.POLYGON_OFFSET_FILL)
-		gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
+			// Render wireframe cubes, with incremental size.
+			gl.Disable(gl.COLOR_MATERIAL)
+			gl.Disable(gl.POLYGON_OFFSET_FILL)
+			gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
 
-		for i := 0; i < 50; i++ {
-			scale := 0.004*float32(i) + 1.0
-			gl.Scalef(scale, scale, scale)
-			mb.Render(gl.QUADS)
-		}
+			for i := 0; i < 50; i++ {
+				scale := 0.004*float32(i) + 1.0
+				gl.Scalef(scale, scale, scale)
+				mb.Render(gl.QUADS)
+			}
 		*/
 
 		angle += 0.5
@@ -73,7 +76,7 @@ func main() {
 }
 
 func createBuffer() *glh.MeshBuffer {
-	
+
 	assimp.RandomColor(scene.Mesh[0])
 	fmesh := assimp.NewFlatMesh(scene.Mesh[0])
 
@@ -210,10 +213,21 @@ void main()
 
 }
 
-
 func loadMeshInfo() {
-	path, err := gas.Abs("github.com/andrebq/assimp/data/cube.dae")
-	if err != nil { panic(err) }
-	
-	scene, err = conv.LoadAsset(path)
+
+	println(*meshFile)
+	if *meshFile == "" {
+		path, err := gas.Abs("github.com/andrebq/assimp/data/cube.dae")
+		if err != nil {
+			panic(err)
+		}
+		*meshFile = path
+	}
+	println(*meshFile)
+
+	var err error
+	scene, err = conv.LoadAsset(*meshFile)
+	if err != nil {
+		panic(err)
+	}
 }
