@@ -4,5 +4,5 @@
 
 void main(){
 	gl_Position = ftransform();
-	gl_FrontColor = gl_Color * vec4(vec3(1), 0);
+	gl_FrontColor = gl_Color;
 }

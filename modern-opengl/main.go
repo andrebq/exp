@@ -6,6 +6,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"github.com/andrebq/assimp"
 	"github.com/andrebq/assimp/conv"
@@ -14,63 +15,74 @@ import (
 	"github.com/go-gl/glfw"
 	"github.com/go-gl/glh"
 	"github.com/go-gl/glu"
-	"log"
-	"unicode/utf8"
 	"io/ioutil"
-	"time"
+	"log"
 	"os"
-	"errors"
+	"time"
+	"unicode/utf8"
 )
 
 type shaderInfo struct {
 	shaderName string
-	fragMod time.Time
-	vertMod time.Time
-	vertCode string
-	fragCode string
+	fragMod    time.Time
+	vertMod    time.Time
+	vertCode   string
+	fragCode   string
 }
 
 func loadShaderInfo(name string) (*shaderInfo, error) {
 	si := &shaderInfo{}
 	vname := name + ".vertex.glsl"
 	fname := name + ".frag.glsl"
-	
+
 	vstat, err := os.Stat(vname)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	si.vertMod = vstat.ModTime()
-	
+
 	fstat, err := os.Stat(fname)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	si.fragMod = fstat.ModTime()
-	
+
 	vcode, err := ioutil.ReadFile(vname)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	if !utf8.Valid(vcode) {
 		return nil, errors.New("Vertex shader must be utf-8")
 	}
-	
+
 	fcode, err := ioutil.ReadFile(fname)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	if !utf8.Valid(fcode) {
 		return nil, errors.New("Fragment shader must be utf-8")
 	}
 	si.shaderName = name
 	si.vertCode = string(vcode)
 	si.fragCode = string(fcode)
-	
+
 	return si, nil
 }
 
 func loadShaderInfoIfNew(name string, vtime, ftime time.Time) (*shaderInfo, error) {
 	vname := name + ".vertex.glsl"
 	fname := name + ".frag.glsl"
-	
+
 	vstat, err := os.Stat(vname)
-	if err != nil { return nil, err }
-	
+	if err != nil {
+		return nil, err
+	}
+
 	fstat, err := os.Stat(fname)
-	if err != nil { return nil, err }
-	
+	if err != nil {
+		return nil, err
+	}
+
 	if vstat.ModTime().After(vtime) || fstat.ModTime().After(ftime) {
 		return loadShaderInfo(name)
 	}
@@ -80,6 +92,7 @@ func loadShaderInfoIfNew(name string, vtime, ftime time.Time) (*shaderInfo, erro
 var (
 	scene    *assimp.Scene
 	meshFile = flag.String("if", "", "Sample cube")
+	lastErr  error
 )
 
 func main() {
@@ -93,8 +106,10 @@ func main() {
 		return
 	}
 
-
-	program, shaderInfo := loadShaders(gl.Program(0), nil)
+	program, shaderInfo, err := loadShaders(gl.Program(0), nil)
+	if err != nil {
+		panic(err)
+	}
 	_ = program
 
 	defer glfw.Terminate()
@@ -108,7 +123,15 @@ func main() {
 	for glfw.WindowParam(glfw.Opened) > 0 {
 		select {
 		case <-reload:
-			program, shaderInfo = loadShaders(program, shaderInfo)
+			oldInfo := shaderInfo
+			program, shaderInfo, err = loadShaders(program, shaderInfo)
+			if err != nil && lastErr == nil {
+				lastErr = err
+				println("Error loading shaders. Using old code.", lastErr)
+			} else if err == nil && oldInfo != shaderInfo {
+				lastErr = nil
+				println("new shader code loaded")
+			}
 		default:
 			// do nothing here
 		}
@@ -232,13 +255,12 @@ func onResize(w, h int) {
 }
 
 // Create a vertex/fragment shader program
-func createSampleProgram(info *shaderInfo) gl.Program {
-
+func createProgram(info *shaderInfo) (gl.Program, error) {
 	vshader := gl.CreateShader(gl.VERTEX_SHADER)
 	vshader.Source(info.vertCode)
 	vshader.Compile()
 	if vshader.Get(gl.COMPILE_STATUS) != gl.TRUE {
-		panic("Unable to compile vertex shader. " + vshader.GetInfoLog())
+		return gl.Program(0), errors.New("Unable to compile vertex shader. " + vshader.GetInfoLog())
 	}
 	defer vshader.Delete() // no need to use it after linking
 
@@ -246,7 +268,7 @@ func createSampleProgram(info *shaderInfo) gl.Program {
 	fshader.Source(info.fragCode)
 	fshader.Compile()
 	if fshader.Get(gl.COMPILE_STATUS) != gl.TRUE {
-		panic("Unable to compile fragment shader. " + fshader.GetInfoLog())
+		return gl.Program(0), errors.New("Unable to compile fragment shader. " + fshader.GetInfoLog())
 	}
 	defer fshader.Delete() // no need to use it after linking
 
@@ -256,10 +278,10 @@ func createSampleProgram(info *shaderInfo) gl.Program {
 	program.Link()
 
 	if program.Get(gl.LINK_STATUS) != gl.TRUE {
-		panic("Unable to link program. " + fshader.GetInfoLog())
+		return gl.Program(0), errors.New("Unable to link program. " + fshader.GetInfoLog())
 	}
 
-	return program
+	return program, nil
 }
 
 func loadMeshInfo() {
@@ -281,22 +303,29 @@ func loadMeshInfo() {
 	}
 }
 
-func loadShaders(oldProgram gl.Program, last *shaderInfo) (gl.Program, *shaderInfo) {
+func loadShaders(oldProgram gl.Program, last *shaderInfo) (gl.Program, *shaderInfo, error) {
 	if last != nil {
 		newInfo, err := loadShaderInfoIfNew("sample", last.vertMod, last.fragMod)
-		if err != nil { panic(err) }
+		if err != nil {
+			return oldProgram, last, err
+		}
 		if newInfo == nil {
 			// nothing new, can reuse the old code
-			return oldProgram, last
+			return oldProgram, last, nil
 		} else {
+			newProgram, err := createProgram(newInfo)
+			if err != nil {
+				return oldProgram, last, err
+			}
 			oldProgram.Delete()
-			oldProgram = createSampleProgram(newInfo)
-			return oldProgram, newInfo
+			return newProgram, newInfo, err
 		}
 	}
 	last, err := loadShaderInfo("sample")
-	if err != nil { panic(err) }
-	oldProgram = createSampleProgram(last)
-	
-	return oldProgram, last
+	if err != nil {
+		return oldProgram, last, err
+	}
+	oldProgram, err = createProgram(last)
+
+	return oldProgram, last, err
 }
