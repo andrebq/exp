@@ -93,6 +93,8 @@ var (
 	scene    *assimp.Scene
 	meshFile = flag.String("if", "", "Sample cube")
 	lastErr  error
+	zoom = float32(-20)
+	rotVet [3]float32
 )
 
 func main() {
@@ -137,8 +139,8 @@ func main() {
 		}
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 		gl.LoadIdentity()
-		gl.Translatef(0, 0, -20)
-		gl.Rotatef(angle, 1, 1, 1)
+		gl.Translatef(0, 0, zoom)
+		gl.Rotatef(angle, rotVet[0], rotVet[1], rotVet[2])
 		program.Use()
 
 		gl.Enable(gl.COLOR_MATERIAL)
@@ -146,7 +148,11 @@ func main() {
 		gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
 		mb.Render(gl.TRIANGLES)
 
-		angle += 0.5
+		if rotVet[0] + rotVet[1] + rotVet[2] != 0 {
+			// only increment the angle if at least one of the rotate axis
+			// is enabled
+			angle += 0.5	
+		}
 		glfw.SwapBuffers()
 	}
 }
@@ -156,13 +162,26 @@ func createBuffer() *glh.MeshBuffer {
 
 	assimp.RandomColor(scene.Mesh[0])
 	fmesh := assimp.NewFlatMesh(scene.Mesh[0])
+	
+	println("FMesh vertex count: ", len(fmesh.Vertex))
 
+	var idxAttr *glh.Attr
+	switch sz := len(fmesh.Index); {
+	case sz < int(assimp.ByteSize):
+		idxAttr = glh.NewIndexAttr(1, gl.UNSIGNED_BYTE, gl.STATIC_DRAW)
+	case sz < int(assimp.ShortSize):
+		idxAttr = glh.NewIndexAttr(1, gl.UNSIGNED_SHORT, gl.STATIC_DRAW)
+	default:
+		idxAttr = glh.NewIndexAttr(1, gl.UNSIGNED_INT, gl.STATIC_DRAW)
+	}
+	idxAttr = glh.NewIndexAttr(1, gl.UNSIGNED_INT, gl.STATIC_DRAW)
+	
 	// Create a mesh buffer with the given attributes.
 	mb := glh.NewMeshBuffer(
 		glh.RenderBuffered,
 
 		// Indices.
-		glh.NewIndexAttr(1, gl.UNSIGNED_BYTE, gl.STATIC_DRAW),
+		idxAttr,
 
 		// Vertex positions have 3 components (x, y, z).
 		glh.NewPositionAttr(3, gl.FLOAT, gl.STATIC_DRAW),
@@ -172,7 +191,7 @@ func createBuffer() *glh.MeshBuffer {
 	)
 
 	// Add the mesh to the buffer.
-	mb.Add(fmesh.ByteIndex, fmesh.Vertex, fmesh.Color)
+	mb.Add(fmesh.Index, fmesh.Vertex, fmesh.Color)
 	return mb
 }
 
@@ -217,8 +236,27 @@ func initGL() error {
 
 // onKey handles key events.
 func onKey(key, state int) {
-	if key == glfw.KeyEsc {
+	switch key {
+	case glfw.KeyEsc:
 		glfw.CloseWindow()
+	case 'W':
+		zoom--
+	case 'S':
+		zoom++
+	case '1', '2', '3':
+		var idx int
+		switch key {
+		case '1': idx = 0
+		case '2': idx = 1
+		case '3': idx = 2
+		}
+		if state == glfw.KeyPress {
+			if rotVet[idx] == 1 {
+				rotVet[idx] = 0
+			} else {
+				rotVet[idx] = 1
+			}
+		}
 	}
 }
 
