@@ -15,7 +15,67 @@ import (
 	"github.com/go-gl/glh"
 	"github.com/go-gl/glu"
 	"log"
+	"unicode/utf8"
+	"io/ioutil"
+	"time"
+	"os"
+	"errors"
 )
+
+type shaderInfo struct {
+	shaderName string
+	fragMod time.Time
+	vertMod time.Time
+	vertCode string
+	fragCode string
+}
+
+func loadShaderInfo(name string) (*shaderInfo, error) {
+	si := &shaderInfo{}
+	vname := name + ".vertex.glsl"
+	fname := name + ".frag.glsl"
+	
+	vstat, err := os.Stat(vname)
+	if err != nil { return nil, err }
+	si.vertMod = vstat.ModTime()
+	
+	fstat, err := os.Stat(fname)
+	if err != nil { return nil, err }
+	si.fragMod = fstat.ModTime()
+	
+	vcode, err := ioutil.ReadFile(vname)
+	if err != nil { return nil, err }
+	if !utf8.Valid(vcode) {
+		return nil, errors.New("Vertex shader must be utf-8")
+	}
+	
+	fcode, err := ioutil.ReadFile(fname)
+	if err != nil { return nil, err }
+	if !utf8.Valid(fcode) {
+		return nil, errors.New("Fragment shader must be utf-8")
+	}
+	si.shaderName = name
+	si.vertCode = string(vcode)
+	si.fragCode = string(fcode)
+	
+	return si, nil
+}
+
+func loadShaderInfoIfNew(name string, vtime, ftime time.Time) (*shaderInfo, error) {
+	vname := name + ".vertex.glsl"
+	fname := name + ".frag.glsl"
+	
+	vstat, err := os.Stat(vname)
+	if err != nil { return nil, err }
+	
+	fstat, err := os.Stat(fname)
+	if err != nil { return nil, err }
+	
+	if vstat.ModTime().After(vtime) || fstat.ModTime().After(ftime) {
+		return loadShaderInfo(name)
+	}
+	return nil, nil
+}
 
 var (
 	scene    *assimp.Scene
@@ -33,7 +93,8 @@ func main() {
 		return
 	}
 
-	program := createSampleProgram()
+
+	program, shaderInfo := loadShaders(gl.Program(0), nil)
 	_ = program
 
 	defer glfw.Terminate()
@@ -43,12 +104,19 @@ func main() {
 
 	// Perform the rendering.
 	var angle float32
+	reload := time.Tick(time.Duration(300 * time.Millisecond))
 	for glfw.WindowParam(glfw.Opened) > 0 {
+		select {
+		case <-reload:
+			program, shaderInfo = loadShaders(program, shaderInfo)
+		default:
+			// do nothing here
+		}
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 		gl.LoadIdentity()
 		gl.Translatef(0, 0, -20)
 		gl.Rotatef(angle, 1, 1, 1)
-		//program.Use()
+		program.Use()
 
 		// Render a solid cube at half the scale.
 		//gl.Scalef(0.2, 0.2, 0.2)
@@ -164,40 +232,23 @@ func onResize(w, h int) {
 }
 
 // Create a vertex/fragment shader program
-func createSampleProgram() gl.Program {
-	vs := `
-#version 120
-// Input vertex data, different for all executions of this shader.
-// attribute vec3 vertexPosition_modelspace;
-void main(){
+func createSampleProgram(info *shaderInfo) gl.Program {
 
-	gl_Position = gl_Vertex;
-}
-	`
-	fs := `
-#version 120
-
-void main()
-{
-
-	// Output color = red 
-	gl_FragColor = vec4(1,0,0,1);
-
-}
-	`
 	vshader := gl.CreateShader(gl.VERTEX_SHADER)
-	vshader.Source(vs)
+	vshader.Source(info.vertCode)
 	vshader.Compile()
 	if vshader.Get(gl.COMPILE_STATUS) != gl.TRUE {
 		panic("Unable to compile vertex shader. " + vshader.GetInfoLog())
 	}
+	defer vshader.Delete() // no need to use it after linking
 
 	fshader := gl.CreateShader(gl.FRAGMENT_SHADER)
-	fshader.Source(fs)
+	fshader.Source(info.fragCode)
 	fshader.Compile()
 	if fshader.Get(gl.COMPILE_STATUS) != gl.TRUE {
 		panic("Unable to compile fragment shader. " + fshader.GetInfoLog())
 	}
+	defer fshader.Delete() // no need to use it after linking
 
 	program := gl.CreateProgram()
 	program.AttachShader(vshader)
@@ -208,9 +259,7 @@ void main()
 		panic("Unable to link program. " + fshader.GetInfoLog())
 	}
 
-	//program.Use()
 	return program
-
 }
 
 func loadMeshInfo() {
@@ -230,4 +279,24 @@ func loadMeshInfo() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func loadShaders(oldProgram gl.Program, last *shaderInfo) (gl.Program, *shaderInfo) {
+	if last != nil {
+		newInfo, err := loadShaderInfoIfNew("sample", last.vertMod, last.fragMod)
+		if err != nil { panic(err) }
+		if newInfo == nil {
+			// nothing new, can reuse the old code
+			return oldProgram, last
+		} else {
+			oldProgram.Delete()
+			oldProgram = createSampleProgram(newInfo)
+			return oldProgram, newInfo
+		}
+	}
+	last, err := loadShaderInfo("sample")
+	if err != nil { panic(err) }
+	oldProgram = createSampleProgram(last)
+	
+	return oldProgram, last
 }
