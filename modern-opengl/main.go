@@ -1,9 +1,9 @@
-// Copyright 2012 The go-gl Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// This program demonstrates the use of a MeshBuffer.
 package main
+/*Copyright (c) 2012 André Luiz Alves Moraes
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.*/
 
 import (
 	"errors"
@@ -141,31 +141,17 @@ func main() {
 		gl.Rotatef(angle, 1, 1, 1)
 		program.Use()
 
-		// Render a solid cube at half the scale.
-		//gl.Scalef(0.2, 0.2, 0.2)
 		gl.Enable(gl.COLOR_MATERIAL)
 		gl.Enable(gl.POLYGON_OFFSET_FILL)
 		gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
 		mb.Render(gl.TRIANGLES)
-		/*
-
-			// Render wireframe cubes, with incremental size.
-			gl.Disable(gl.COLOR_MATERIAL)
-			gl.Disable(gl.POLYGON_OFFSET_FILL)
-			gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
-
-			for i := 0; i < 50; i++ {
-				scale := 0.004*float32(i) + 1.0
-				gl.Scalef(scale, scale, scale)
-				mb.Render(gl.QUADS)
-			}
-		*/
 
 		angle += 0.5
 		glfw.SwapBuffers()
 	}
 }
 
+// Create the glh.MeshBufer
 func createBuffer() *glh.MeshBuffer {
 
 	assimp.RandomColor(scene.Mesh[0])
@@ -219,7 +205,7 @@ func initGL() error {
 	gl.Enable(gl.MULTISAMPLE)
 	gl.Disable(gl.LIGHTING)
 
-	gl.ClearColor(0.2, 0.2, 0.23, 1.0)
+	gl.ClearColor(0.2, 0.2, 0.2, 1.0)
 	gl.ShadeModel(gl.SMOOTH)
 	gl.LineWidth(2)
 	gl.ClearDepth(1)
@@ -284,6 +270,7 @@ func createProgram(info *shaderInfo) (gl.Program, error) {
 	return program, nil
 }
 
+// Load the mesh information.
 func loadMeshInfo() {
 
 	println(*meshFile)
@@ -303,6 +290,7 @@ func loadMeshInfo() {
 	}
 }
 
+// Load the shader only if it have been modified
 func loadShaders(oldProgram gl.Program, last *shaderInfo) (gl.Program, *shaderInfo, error) {
 	if last != nil {
 		newInfo, err := loadShaderInfoIfNew("sample", last.vertMod, last.fragMod)
