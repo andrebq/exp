@@ -160,7 +160,10 @@ func main() {
 // Create the glh.MeshBufer
 func createBuffer() *glh.MeshBuffer {
 
-	assimp.RandomColor(scene.Mesh[0])
+	if len(scene.Mesh[0].Colors) == 0 {
+		// just add some colors to it.
+		assimp.RandomColor(scene.Mesh[0])
+	}
 	fmesh := assimp.NewFlatMesh(scene.Mesh[0])
 	
 	println("FMesh vertex count: ", len(fmesh.Vertex))
