@@ -1,4 +1,5 @@
 package main
+
 /*Copyright (c) 2012 André Luiz Alves Moraes
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -93,8 +94,8 @@ var (
 	scene    *assimp.Scene
 	meshFile = flag.String("if", "", "Sample cube")
 	lastErr  error
-	zoom = float32(-20)
-	rotVet [3]float32
+	zoom     = float32(20)
+	rotVet   [3]float32
 )
 
 func main() {
@@ -139,8 +140,12 @@ func main() {
 		}
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 		gl.LoadIdentity()
-		gl.Translatef(0, 0, zoom)
-		gl.Rotatef(angle, rotVet[0], rotVet[1], rotVet[2])
+		gl.Translatef(0, 0, -zoom)
+
+		if angle > 0 {
+			gl.Rotatef(angle, rotVet[0], rotVet[1], rotVet[2])
+		}
+
 		program.Use()
 
 		gl.Enable(gl.COLOR_MATERIAL)
@@ -148,10 +153,12 @@ func main() {
 		gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
 		mb.Render(gl.TRIANGLES)
 
-		if rotVet[0] + rotVet[1] + rotVet[2] != 0 {
+		if rotVet[0]+rotVet[1]+rotVet[2] != 0 {
 			// only increment the angle if at least one of the rotate axis
 			// is enabled
-			angle += 0.5	
+			angle += 0.5
+		} else if angle != 0 {
+			angle = 0
 		}
 		glfw.SwapBuffers()
 	}
@@ -165,7 +172,7 @@ func createBuffer() *glh.MeshBuffer {
 		assimp.RandomColor(scene.Mesh[0])
 	}
 	fmesh := assimp.NewFlatMesh(scene.Mesh[0])
-	
+
 	println("FMesh vertex count: ", len(fmesh.Vertex))
 
 	var idxAttr *glh.Attr
@@ -178,7 +185,7 @@ func createBuffer() *glh.MeshBuffer {
 		idxAttr = glh.NewIndexAttr(1, gl.UNSIGNED_INT, gl.STATIC_DRAW)
 	}
 	idxAttr = glh.NewIndexAttr(1, gl.UNSIGNED_INT, gl.STATIC_DRAW)
-	
+
 	// Create a mesh buffer with the given attributes.
 	mb := glh.NewMeshBuffer(
 		glh.RenderBuffered,
@@ -249,9 +256,12 @@ func onKey(key, state int) {
 	case '1', '2', '3':
 		var idx int
 		switch key {
-		case '1': idx = 0
-		case '2': idx = 1
-		case '3': idx = 2
+		case '1':
+			idx = 0
+		case '2':
+			idx = 1
+		case '3':
+			idx = 2
 		}
 		if state == glfw.KeyPress {
 			if rotVet[idx] == 1 {
