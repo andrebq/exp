@@ -2,17 +2,17 @@ package main
 
 import (
 	"code.google.com/p/goplan9/plan9"
-	"net"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"sync"
 )
 
 var (
 	listen = flag.String("listen", "127.0.0.1:5640", "Address to listen")
-	help = flag.Bool("h", false, "Help")
+	help   = flag.Bool("h", false, "Help")
 )
 
 type Server struct {
@@ -23,7 +23,9 @@ type Server struct {
 func NewServer(lnet, laddr string, explorer FileExplorer) (*Server, error) {
 	s := &Server{}
 	l, err := net.Listen(lnet, laddr)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	s.listener = l
 	s.explorer = explorer
 	return s, nil
@@ -108,7 +110,7 @@ type ClientConn struct {
 type FileExplorer interface {
 	// Must return the unique identifier for this explorer root.
 	//
-	// The returned value can't be zero, since 0 is considered a non-existing path 
+	// The returned value can't be zero, since 0 is considered a non-existing path
 	Root() uint64
 	// Should return the unique identifier and type of the given name under the given directory
 	//
@@ -129,21 +131,22 @@ type fileRef struct {
 type FileType uint8
 
 const (
-	FTFILE = FileType(plan9.QTFILE)
-	FTDIR = FileType(plan9.QTDIR)
+	FTFILE  = FileType(plan9.QTFILE)
+	FTDIR   = FileType(plan9.QTDIR)
 	FTMOUNT = FileType(plan9.QTMOUNT)
 )
 
 type FileMode uint8
+
 const (
-	FMREAD = FileMode(plan9.OREAD)
+	FMREAD  = FileMode(plan9.OREAD)
 	FMWRITE = FileMode(plan9.OWRITE)
-	FMRDWR = FileMode(plan9.ORDWR)
+	FMRDWR  = FileMode(plan9.ORDWR)
 )
 
 func NewClientConn(conn net.Conn, server *Server, explorer FileExplorer) *ClientConn {
 	cc := &ClientConn{conn: conn, server: server, fileRefs: make(map[uint64]*fileRef),
-		explorer: explorer, fidmap: make(map[uint32]uint64)};
+		explorer: explorer, fidmap: make(map[uint32]uint64)}
 	return cc
 }
 
@@ -234,7 +237,7 @@ func (c *ClientConn) walk(fc *plan9.Fcall) *plan9.Fcall {
 		// another part of the path
 		//
 		// so, just break here
-		if ft == FTFILE && idx != len(fc.Wname) - 1 {
+		if ft == FTFILE && idx != len(fc.Wname)-1 {
 			println("here")
 			return c.fileNotFoundErr(fc)
 		}
@@ -306,7 +309,7 @@ func (c *ClientConn) bindFid(fid uint32, path uint64) {
 	c.fidmap[fid] = path
 }
 
-// Create a file for the given path, if the path is already present, then just check 
+// Create a file for the given path, if the path is already present, then just check
 // if the version/type are the same, if they are, just return the existing file, otherwise
 // return an error
 //
@@ -367,7 +370,7 @@ func main() {
 		flag.Usage()
 		return
 	}
-	server,err := NewServer("tcp", *listen, dummyExplorer{})
+	server, err := NewServer("tcp", *listen, dummyExplorer{})
 	if err != nil {
 		log.Fatalf("Unable to create server. Cause: %v", err)
 	}
