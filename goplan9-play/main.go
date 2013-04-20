@@ -321,6 +321,19 @@ func (c *ClientConn) readfile(fc *plan9.Fcall, ref *fileRef) *plan9.Fcall {
 	fc.Data = c.allocBuffer(min(int(c.iounit), int(fc.Count), int(size)))
 	defer c.discardBuffer(fc.Data)
 	n, err := c.explorer.Read(fc.Data, fc.Offset, ref.Path)
+	if err == io.EOF {
+		if n == 0 {
+			// returned EOF without reading anything, should return fc.Count = 0
+			c.discardBuffer(fc.Data)
+			fc.Data = nil
+			err = nil
+			return fc
+		} else {
+			// was able to read som data from the file, should return the count
+			// but not the error. The next call to read will trigger the EOF
+			err = nil
+		}
+	}
 	if err != nil {
 		return c.unexpectedErr(fc, err)
 	}
