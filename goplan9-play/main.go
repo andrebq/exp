@@ -226,6 +226,8 @@ func (c *ClientConn) walk(fc *plan9.Fcall) *plan9.Fcall {
 			return c.fileNotFoundErr(fc)
 		}
 	}
+	// make a bind between the last qid and the new fid
+	c.bindFid(fc.Newfid, fc.Wqid[len(fc.Wqid)-1].Path)
 	return fc
 }
 
