@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"sort"
 	"sync"
 )
 
@@ -104,6 +105,8 @@ type ClientConn struct {
 	fidmap map[uint32]uint64
 	// explorer used to navigate the FS
 	explorer FileExplorer
+	// atomic unit of a message
+	iounit uint32
 }
 
 // Interface used to navigate, open and close files in the system
@@ -120,11 +123,28 @@ type FileExplorer interface {
 	//
 	// If the error is nil, the file is considered ready for processing
 	Open(file uint64, mode FileMode) error
+	// Read at most len(buf) bytes from the given file starting at the location pointed by
+	// offset
+	//
+	// Should return the number of bytes copied, returning a non null error, don't send any data to the client
+	//
+	// The returned byte count will be converted to uint32
+	Read(buf []byte, offset uint64, path uint64) (int, error)
+	// Return the size of the given file, returning 0, means a file that don't have a
+	// finite size (reading from input devices, like keyboard or serial port)
+	//
+	// When the returned value is 0, the Read method is responsible for sending the io.EOF to signal
+	// the end of file, otherwise, the ClientConn will handle the EOF
+	Sizeof(path uint64) (uint64, error)
 }
 
 // Represent a reference to a file
 type fileRef struct {
 	plan9.Qid
+}
+
+func (fr *fileRef) IsDir() bool {
+	return fr.Type == uint8(FTDIR)
 }
 
 // Type of a file
@@ -146,7 +166,7 @@ const (
 
 func NewClientConn(conn net.Conn, server *Server, explorer FileExplorer) *ClientConn {
 	cc := &ClientConn{conn: conn, server: server, fileRefs: make(map[uint64]*fileRef),
-		explorer: explorer, fidmap: make(map[uint32]uint64)}
+		explorer: explorer, fidmap: make(map[uint32]uint64), iounit: 8192}
 	return cc
 }
 
@@ -187,6 +207,8 @@ func (c *ClientConn) process(fc *plan9.Fcall, out chan *plan9.Fcall) {
 		fc = c.walk(fc)
 	case plan9.Topen:
 		fc = c.open(fc)
+	case plan9.Tread:
+		fc = c.read(fc)
 	default:
 		println("!!!\t", fc.String())
 		fc = nil
@@ -205,6 +227,7 @@ func (c *ClientConn) version(fc *plan9.Fcall) *plan9.Fcall {
 
 func (c *ClientConn) attach(fc *plan9.Fcall) *plan9.Fcall {
 	fc.Type = plan9.Rattach
+	fc.Iounit = c.iounit
 	fref, _ := c.createFileRef(c.explorer.Root(), FTMOUNT, 0)
 	fc.Qid = fref.Qid
 	c.bindFid(fc.Fid, fc.Qid.Path)
@@ -260,6 +283,46 @@ func (c *ClientConn) open(fc *plan9.Fcall) *plan9.Fcall {
 	return c.invalidFidErr(fc)
 }
 
+func (c *ClientConn) read(fc *plan9.Fcall) *plan9.Fcall {
+	fc.Type = plan9.Rread
+	if fref, has := c.fidRef(fc.Fid); has {
+		if fref.IsDir() {
+			return c.readdir(fc)
+		}
+		return c.readfile(fc, fref)
+	}
+	return c.invalidFidErr(fc)
+}
+
+func (c *ClientConn) readdir(fc *plan9.Fcall) *plan9.Fcall {
+	return c.unexpectedErr(fc, fmt.Errorf("directory read isn't ready"))
+}
+
+func min(values ...int) int {
+	sort.Ints(values)
+	return values[0]
+}
+
+func (c *ClientConn) readfile(fc *plan9.Fcall, ref *fileRef) *plan9.Fcall {
+	size, err := c.explorer.Sizeof(ref.Path)
+	if err != nil {
+		return c.unexpectedErr(fc, err)
+	}
+	if size > 0 && fc.Offset >= size {
+		// trying to reading past the end of file.
+		// just return EOF
+		return c.unexpectedErr(fc, io.EOF)
+	}
+	fc.Data = c.allocBuffer(min(int(c.iounit), int(fc.Count), int(size)))
+	defer c.discardBuffer(fc.Data)
+	n, err := c.explorer.Read(fc.Data, fc.Offset, ref.Path)
+	if err != nil {
+		return c.unexpectedErr(fc, err)
+	}
+	fc.Count = uint32(n)
+	return fc
+}
+
 func (c *ClientConn) invalidFidErr(fc *plan9.Fcall) *plan9.Fcall {
 	fc.Type = plan9.Rerror
 	fc.Ename = "fid not found"
@@ -282,6 +345,15 @@ func (c *ClientConn) unexpectedErr(fc *plan9.Fcall, err error) *plan9.Fcall {
 	fc.Type = plan9.Rerror
 	fc.Ename = err.Error()
 	return fc
+}
+
+func (c *ClientConn) allocBuffer(sz int) []byte {
+	return make([]byte, sz)
+}
+
+func (c *ClientConn) discardBuffer(buf []byte) {
+	// do nothing,
+	// later, implement a way to reuse this buffer
 }
 
 // Return the file referenced by the given fid
@@ -362,6 +434,24 @@ func (d dummyExplorer) Open(file uint64, mode FileMode) error {
 		return fmt.Errorf("file is read only")
 	}
 	return nil
+}
+
+func (d dummyExplorer) Read(buf []byte, offset uint64, path uint64) (int, error) {
+	if path != 2 {
+		return 0, fmt.Errorf("file not found")
+	}
+	msg := []byte("hello world")
+	if int(offset) > len(msg) {
+		return 0, io.EOF
+	}
+	return copy(buf, msg), nil
+}
+
+func (d dummyExplorer) Sizeof(path uint64) (uint64, error) {
+	if path == 2 {
+		return 11, nil // hello world
+	}
+	return 0, fmt.Errorf("can't read file")
 }
 
 func main() {
