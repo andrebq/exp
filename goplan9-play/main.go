@@ -114,6 +114,10 @@ type FileExplorer interface {
 	//
 	// If the name don't exists under parent, should return 0
 	Walk(parent uint64, name string) (uint64, FileType)
+	// Open the file for subsequent reading/writing
+	//
+	// If the error is nil, the file is considered ready for processing
+	Open(file uint64, mode FileMode) error
 }
 
 // Represent a reference to a file
@@ -128,6 +132,13 @@ const (
 	FTFILE = FileType(plan9.QTFILE)
 	FTDIR = FileType(plan9.QTDIR)
 	FTMOUNT = FileType(plan9.QTMOUNT)
+)
+
+type FileMode uint8
+const (
+	FMREAD = FileMode(plan9.OREAD)
+	FMWRITE = FileMode(plan9.OWRITE)
+	FMRDWR = FileMode(plan9.ORDWR)
 )
 
 func NewClientConn(conn net.Conn, server *Server, explorer FileExplorer) *ClientConn {
@@ -171,6 +182,8 @@ func (c *ClientConn) process(fc *plan9.Fcall, out chan *plan9.Fcall) {
 		fc = c.attach(fc)
 	case plan9.Twalk:
 		fc = c.walk(fc)
+	case plan9.Topen:
+		fc = c.open(fc)
 	default:
 		println("!!!\t", fc.String())
 		fc = nil
@@ -229,6 +242,19 @@ func (c *ClientConn) walk(fc *plan9.Fcall) *plan9.Fcall {
 	// make a bind between the last qid and the new fid
 	c.bindFid(fc.Newfid, fc.Wqid[len(fc.Wqid)-1].Path)
 	return fc
+}
+
+func (c *ClientConn) open(fc *plan9.Fcall) *plan9.Fcall {
+	fc.Type = plan9.Ropen
+	if fref, has := c.fidRef(fc.Fid); has {
+		err := c.explorer.Open(fref.Path, FileMode(fc.Mode))
+		if err != nil {
+			return c.unexpectedErr(fc, err)
+		}
+		fc.Qid = fref.Qid
+		return fc
+	}
+	return c.invalidFidErr(fc)
 }
 
 func (c *ClientConn) invalidFidErr(fc *plan9.Fcall) *plan9.Fcall {
@@ -323,6 +349,16 @@ func (d dummyExplorer) Walk(parent uint64, name string) (uint64, FileType) {
 		return 2, FTFILE
 	}
 	return 0, FTFILE
+}
+
+func (d dummyExplorer) Open(file uint64, mode FileMode) error {
+	if file != 2 {
+		return fmt.Errorf("file not found")
+	}
+	if mode != FMREAD {
+		return fmt.Errorf("file is read only")
+	}
+	return nil
 }
 
 func main() {
