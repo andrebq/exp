@@ -136,6 +136,8 @@ type FileExplorer interface {
 	// When the returned value is 0, the Read method is responsible for sending the io.EOF to signal
 	// the end of file, otherwise, the ClientConn will handle the EOF
 	Sizeof(path uint64) (uint64, error)
+	// Close the associated file
+	Close(path uint64) error
 }
 
 // Represent a reference to a file
@@ -209,6 +211,8 @@ func (c *ClientConn) process(fc *plan9.Fcall, out chan *plan9.Fcall) {
 		fc = c.open(fc)
 	case plan9.Tread:
 		fc = c.read(fc)
+	case plan9.Tclunk:
+		fc = c.clunk(fc)
 	default:
 		println("!!!\t", fc.String())
 		fc = nil
@@ -277,6 +281,7 @@ func (c *ClientConn) open(fc *plan9.Fcall) *plan9.Fcall {
 		if err != nil {
 			return c.unexpectedErr(fc, err)
 		}
+		fc.Iounit = c.iounit
 		fc.Qid = fref.Qid
 		return fc
 	}
@@ -310,8 +315,8 @@ func (c *ClientConn) readfile(fc *plan9.Fcall, ref *fileRef) *plan9.Fcall {
 	}
 	if size > 0 && fc.Offset >= size {
 		// trying to reading past the end of file.
-		// just return EOF
-		return c.unexpectedErr(fc, io.EOF)
+		// return count == 0 to signal EOF to client
+		fc.Count = 0
 	}
 	fc.Data = c.allocBuffer(min(int(c.iounit), int(fc.Count), int(size)))
 	defer c.discardBuffer(fc.Data)
@@ -320,6 +325,18 @@ func (c *ClientConn) readfile(fc *plan9.Fcall, ref *fileRef) *plan9.Fcall {
 		return c.unexpectedErr(fc, err)
 	}
 	fc.Count = uint32(n)
+	return fc
+}
+
+func (c *ClientConn) clunk(fc *plan9.Fcall) *plan9.Fcall {
+	fc.Type = plan9.Rclunk
+	oldpath, had := c.unbindFid(fc.Fid)
+	if had {
+		err := c.explorer.Close(oldpath)
+		if err != nil {
+			return c.unexpectedErr(fc, err)
+		}
+	}
 	return fc
 }
 
@@ -365,6 +382,17 @@ func (c *ClientConn) fidRef(fid uint32) (*fileRef, bool) {
 		return fref, has
 	}
 	return nil, false
+}
+
+// Forget about the fid
+func (c *ClientConn) unbindFid(fid uint32) (uint64, bool) {
+	c.Lock()
+	defer c.Unlock()
+	path, has := c.fidmap[fid]
+	if has {
+		delete(c.fidmap, fid)
+	}
+	return path, has
 }
 
 // Bind the given fid to the provided path
@@ -452,6 +480,10 @@ func (d dummyExplorer) Sizeof(path uint64) (uint64, error) {
 		return 11, nil // hello world
 	}
 	return 0, fmt.Errorf("can't read file")
+}
+
+func (d dummyExplorer) Close(path uint64) error {
+	return nil
 }
 
 func main() {
