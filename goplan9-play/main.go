@@ -232,7 +232,7 @@ func (c *ClientConn) version(fc *plan9.Fcall) *plan9.Fcall {
 func (c *ClientConn) attach(fc *plan9.Fcall) *plan9.Fcall {
 	fc.Type = plan9.Rattach
 	fc.Iounit = c.iounit
-	fref, _ := c.createFileRef(c.explorer.Root(), FTMOUNT, 0)
+	fref, _ := c.createFileRef(c.explorer.Root(), FTDIR, 0)
 	fc.Qid = fref.Qid
 	c.bindFid(fc.Fid, fc.Qid.Path)
 	return fc
@@ -269,8 +269,15 @@ func (c *ClientConn) walk(fc *plan9.Fcall) *plan9.Fcall {
 			return c.fileNotFoundErr(fc)
 		}
 	}
-	// make a bind between the last qid and the new fid
-	c.bindFid(fc.Newfid, fc.Wqid[len(fc.Wqid)-1].Path)
+	if len(fc.Wqid) == 0 {
+		// newfid and fid will map to the same file
+		if fc.Newfid != fc.Fid {
+			c.bindFid(fc.Newfid, fref.Path)
+		}
+	} else {
+		// make a bind between the last qid and the new fid
+		c.bindFid(fc.Newfid, fc.Wqid[len(fc.Wqid)-1].Path)
+	}
 	return fc
 }
 
@@ -468,11 +475,21 @@ func (d dummyExplorer) Walk(parent uint64, name string) (uint64, FileType) {
 }
 
 func (d dummyExplorer) Open(file uint64, mode FileMode) error {
-	if file != 2 {
+	if file == 1 {
+		// want the root directory
+		if mode != FMREAD {
+			return fmt.Errorf("file is read only")
+		}
+		return nil
+	} else if file == 2 {
+		// want the dummy file
+		if mode != FMREAD {
+			return fmt.Errorf("file is read only")
+		}
+		return nil
+	} else {
+		// error
 		return fmt.Errorf("file not found")
-	}
-	if mode != FMREAD {
-		return fmt.Errorf("file is read only")
 	}
 	return nil
 }
@@ -489,6 +506,10 @@ func (d dummyExplorer) Read(buf []byte, offset uint64, path uint64) (int, error)
 }
 
 func (d dummyExplorer) Sizeof(path uint64) (uint64, error) {
+	if path == 1 {
+		// only one file in the root directory
+		return 1, nil
+	}
 	if path == 2 {
 		return 11, nil // hello world
 	}
