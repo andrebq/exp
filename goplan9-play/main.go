@@ -598,7 +598,7 @@ func (d dummyExplorer) ListDir(path uint64) ([]uint64, error) {
 }
 
 func (d dummyExplorer) Stat(path uint64) (*Stat, error) {
-	st := &Stat{}
+	st := &Stat{Mode: 0644}
 	switch path {
 	case 1:
 		st.Type = FTDIR
