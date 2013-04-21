@@ -168,6 +168,10 @@ type FileExplorer interface {
 	Sizeof(path uint64) (uint64, error)
 	// Close the associated file
 	Close(path uint64) error
+	// Create the given file under the path with name and permission
+	//
+	// Should return the path of the file
+	Create(parent uint64, info File, perm uint32) (uint64, error)
 }
 
 // Utility to sort files from a directory
@@ -279,6 +283,8 @@ func (c *ClientConn) process(fc *plan9.Fcall, out chan *plan9.Fcall) {
 		fc = c.read(fc)
 	case plan9.Tclunk:
 		fc = c.clunk(fc)
+	case plan9.Tcreate:
+		fc = c.create(fc)
 	default:
 		println("!!!\t", fc.String())
 		fc = nil
@@ -481,6 +487,26 @@ func (c *ClientConn) clunk(fc *plan9.Fcall) *plan9.Fcall {
 	return fc
 }
 
+func (c *ClientConn) create(fc *plan9.Fcall) *plan9.Fcall {
+	fc.Type = plan9.Rcreate
+	if fref, have := c.fidRef(fc.Fid); have {
+		file := File{Name: fc.Name}
+		file.Type = FileType(fc.Mode)
+		path, err := c.explorer.Create(fref.Path, file, uint32(fc.Perm))
+		if err != nil {
+			return c.unexpectedErr(fc, err)
+		}
+		cref, err := c.createFileRef(path, file.Type, 0)
+		if err != nil {
+			return c.unexpectedErr(fc, err)
+		}
+		fc.Iounit = c.iounit
+		fc.Qid = cref.Qid
+		return fc
+	}
+	return c.invalidFidErr(fc)
+}
+
 func (c *ClientConn) invalidFidErr(fc *plan9.Fcall) *plan9.Fcall {
 	fc.Type = plan9.Rerror
 	fc.Ename = "fid not found"
@@ -585,83 +611,117 @@ func (c *ClientConn) Close() error {
 	return c.conn.Close()
 }
 
-type dummyExplorer struct{}
+type dummyExplorer struct {
+	tmpfiles map[string]uint64
+	tmpdata  map[uint64][]byte
+}
 
-func (d dummyExplorer) Root() uint64 {
+func (d *dummyExplorer) Root() uint64 {
 	return 1
 }
 
-func (d dummyExplorer) Open(file uint64, mode FileMode) error {
+func (d *dummyExplorer) Open(file uint64, mode FileMode) error {
 	if file == 1 {
 		// want the root directory
 		if mode != FMREAD {
 			return fmt.Errorf("file is read only")
 		}
 		return nil
-	} else if file == 2 {
-		// want the dummy file
-		if mode != FMREAD {
-			return fmt.Errorf("file is read only")
-		}
-		return nil
-	} else {
-		// error
-		return fmt.Errorf("file not found")
 	}
-	return nil
+	if _, have := d.tmpdata[file]; have {
+		return nil
+	}
+	return fmt.Errorf("file not found")
 }
 
-func (d dummyExplorer) Read(buf []byte, offset uint64, path uint64) (int, error) {
-	if path != 2 {
+func (d *dummyExplorer) Read(buf []byte, offset uint64, path uint64) (int, error) {
+	data, have := d.tmpdata[path]
+	if !have {
 		return 0, fmt.Errorf("file not found")
 	}
-	msg := []byte("hello world")
-	if int(offset) > len(msg) {
+	if int(offset) > len(data) {
 		return 0, io.EOF
 	}
-	return copy(buf, msg), nil
+	return copy(buf, data), nil
 }
 
-func (d dummyExplorer) Sizeof(path uint64) (uint64, error) {
+func (d *dummyExplorer) Sizeof(path uint64) (uint64, error) {
 	if path == 1 {
 		// only one file in the root directory
 		return 1, nil
 	}
-	if path == 2 {
-		return 11, nil // hello world
+	data, have := d.tmpdata[path]
+	if !have {
+		return 0, fmt.Errorf("file not found")
 	}
-	return 0, fmt.Errorf("can't read file")
+	return uint64(len(data)), nil
 }
 
-func (d dummyExplorer) ListDir(path uint64) (FileList, error) {
+func (d *dummyExplorer) ListDir(path uint64) (FileList, error) {
 	switch path {
 	case 1:
-		return FileList{
-			File{Path: 2, Name: "dummy", Type: FTFILE},
-		}, nil
+		ret := make(FileList, 0)
+		for k, v := range d.tmpfiles {
+			ret = append(ret, File{Path: v, Name: k, Type: FTFILE})
+		}
+		return ret, nil
 	}
 	return nil, fmt.Errorf("file not found")
 }
 
-func (d dummyExplorer) Stat(path uint64) (*Stat, error) {
+func (d *dummyExplorer) Stat(path uint64) (*Stat, error) {
 	st := &Stat{Mode: 0644}
 	switch path {
 	case 1:
+		st.Mode = 0755
 		st.Type = FTDIR
-		st.Size = 1 // just one file
+		st.Size = uint64(len(d.tmpfiles))
 		st.Name = "/"
-	case 2:
-		st.Type = FTFILE
-		st.Size = 11 // hello world
-		st.Name = "dummy"
 	default:
-		panic("Stat should only be called with valid path's")
+		if data, have := d.tmpdata[path]; have {
+			st.Type = FTFILE
+			st.Size = uint64(len(data))
+			st.Name = d.nameForPath(path)
+			return st, nil
+		}
+		return nil, fmt.Errorf("file not found")
 	}
-	return st, nil
+	panic("not reached")
 }
 
-func (d dummyExplorer) Close(path uint64) error {
+func (d *dummyExplorer) Close(path uint64) error {
 	return nil
+}
+
+func (d *dummyExplorer) Create(parent uint64, file File, perm uint32) (uint64, error) {
+	if parent != 1 {
+		return 0, fmt.Errorf("cannot create directories")
+	}
+	if _, exist := d.tmpfiles[file.Name]; exist {
+		return 0, fmt.Errorf("cannot create the given file")
+	}
+	path := d.maxQid() + 1
+	d.tmpfiles[file.Name] = path
+	d.tmpdata[path] = allocBuffer(0)
+	return path, nil
+}
+
+func (d *dummyExplorer) nameForPath(p uint64) string {
+	for k, v := range d.tmpfiles {
+		if v == p {
+			return k
+		}
+	}
+	panic("path not found")
+}
+func (d *dummyExplorer) maxQid() uint64 {
+	next := uint64(1)
+	for k, _ := range d.tmpdata {
+		if k > next {
+			next = k
+		}
+	}
+	return next
 }
 
 func main() {
@@ -670,7 +730,11 @@ func main() {
 		flag.Usage()
 		return
 	}
-	server, err := NewServer("tcp", *listen, dummyExplorer{})
+	de := dummyExplorer{tmpfiles: make(map[string]uint64), tmpdata: make(map[uint64][]byte)}
+	de.tmpfiles["dummy"] = 2
+	de.tmpdata[2] = []byte("hello world")
+
+	server, err := NewServer("tcp", *listen, &de)
 	if err != nil {
 		log.Fatalf("Unable to create server. Cause: %v", err)
 	}
