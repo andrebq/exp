@@ -112,12 +112,9 @@ type ClientConn struct {
 
 // Information about a given file
 type Stat struct {
-	// Type of the given file
-	Type FileType
+	File
 	// Permissions (unix like)
 	Mode uint32
-	// Name of the given file
-	Name string
 	// Time of the last access
 	Atime uint32
 	// Time of the last modification
@@ -132,8 +129,14 @@ type Stat struct {
 	// for directories, should return the number of child nodes
 	// for files, the number of bytes in the file
 	Size uint64
-	// Version of the file
+}
+
+// Represent the path, version and name of any given location in filesystem
+type File struct {
+	Path    uint64
+	Name    string
 	Version uint32
+	Type    FileType
 }
 
 // Interface used to navigate, open and close files in the system
@@ -142,10 +145,6 @@ type FileExplorer interface {
 	//
 	// The returned value can't be zero, since 0 is considered a non-existing path
 	Root() uint64
-	// Should return the unique identifier and type of the given name under the given directory
-	//
-	// If the name don't exists under parent, should return 0
-	Walk(parent uint64, name string) (uint64, FileType)
 	// Open the file for subsequent reading/writing
 	//
 	// If the error is nil, the file is considered ready for processing
@@ -158,7 +157,7 @@ type FileExplorer interface {
 	// The returned byte count will be converted to uint32
 	Read(buf []byte, offset uint64, path uint64) (int, error)
 	// Return the list of ID's for the given path. path will always point to a directory
-	ListDir(path uint64) ([]uint64, error)
+	ListDir(path uint64) (FileList, error)
 	// Return the information about the given file or directory
 	Stat(path uint64) (*Stat, error)
 	// Return the size of the given file, returning 0, means a file that don't have a
@@ -169,6 +168,42 @@ type FileExplorer interface {
 	Sizeof(path uint64) (uint64, error)
 	// Close the associated file
 	Close(path uint64) error
+}
+
+// Utility to sort files from a directory
+type FileList []File
+
+func (f FileList) Len() int {
+	return len(f)
+}
+func (f FileList) Swap(i, j int) {
+	f[i], f[j] = f[j], f[i]
+}
+func (f FileList) Less(i, j int) bool {
+	return f[i].Name < f[j].Name
+}
+func (f FileList) FindExact(name string) (int, bool) {
+	idx := sort.Search(len(f), func(i int) bool {
+		return f[i].Name >= name
+	})
+	if idx < len(f) && f[idx].Name == name {
+		return idx, true
+	}
+	return idx, false
+}
+
+// This is a complement to FileExplorer, to include some search facilities
+//
+// The methods listed here aren't required to implement a full fileserver, but they might be useful if a directory have
+// lot's of child node.
+type FileFinder interface {
+	FileExplorer
+	// This method should return the File structure for the given name under path.
+	//
+	// If there is no file with that name, should simply return nil.
+	//
+	// Returning an error here will result in a Rerror message sent to the client
+	FindInDir(path uint64, name string) (*File, error)
 }
 
 // Represent a reference to a file
@@ -281,9 +316,25 @@ func (c *ClientConn) walk(fc *plan9.Fcall) *plan9.Fcall {
 	current := fref.Path
 	for idx, name := range fc.Wname {
 		var ft FileType
-		current, ft = c.explorer.Walk(current, name)
 		if current == 0 {
 			return c.fileNotFoundErr(fc)
+		}
+		if ff, ok := c.explorer.(FileFinder); ok {
+			f, err := ff.FindInDir(current, name)
+			if err != nil {
+				return c.unexpectedErr(fc, err)
+			}
+			current = f.Path
+		} else {
+			childs, err := c.explorer.ListDir(current)
+			if err != nil {
+				return c.unexpectedErr(fc, err)
+			}
+			idx, have := childs.FindExact(name)
+			if !have {
+				return c.fileNotFoundErr(fc)
+			}
+			current = childs[idx].Path
 		}
 		ref, err := c.createFileRef(current, ft, 0)
 		if err != nil {
@@ -352,12 +403,12 @@ func (c *ClientConn) readdir(fc *plan9.Fcall, ref *fileRef) *plan9.Fcall {
 	out := bytes.NewBuffer(tmpBuf[:0])
 	defer discardBuffer(tmpBuf)
 	for _, id := range childs {
-		stat, err := c.explorer.Stat(id)
+		stat, err := c.explorer.Stat(id.Path)
 		if err != nil {
 			return c.unexpectedErr(fc, err)
 		}
 		dir := plan9.Dir{
-			Qid:    plan9.Qid{Type: uint8(stat.Type), Vers: stat.Version, Path: id},
+			Qid:    plan9.Qid{Type: uint8(stat.Type), Vers: stat.Version, Path: id.Path},
 			Mode:   plan9.Perm(stat.Mode),
 			Atime:  stat.Atime,
 			Mtime:  stat.Mtime,
@@ -540,14 +591,6 @@ func (d dummyExplorer) Root() uint64 {
 	return 1
 }
 
-func (d dummyExplorer) Walk(parent uint64, name string) (uint64, FileType) {
-	println("\t...searching ", parent, " for file: ", name)
-	if parent == 1 && name == "dummy" {
-		return 2, FTFILE
-	}
-	return 0, FTFILE
-}
-
 func (d dummyExplorer) Open(file uint64, mode FileMode) error {
 	if file == 1 {
 		// want the root directory
@@ -590,11 +633,14 @@ func (d dummyExplorer) Sizeof(path uint64) (uint64, error) {
 	return 0, fmt.Errorf("can't read file")
 }
 
-func (d dummyExplorer) ListDir(path uint64) ([]uint64, error) {
-	if path != 1 {
-		return nil, fmt.Errorf("not a directory")
+func (d dummyExplorer) ListDir(path uint64) (FileList, error) {
+	switch path {
+	case 1:
+		return FileList{
+			File{Path: 2, Name: "dummy", Type: FTFILE},
+		}, nil
 	}
-	return []uint64{2}, nil
+	return nil, fmt.Errorf("file not found")
 }
 
 func (d dummyExplorer) Stat(path uint64) (*Stat, error) {
