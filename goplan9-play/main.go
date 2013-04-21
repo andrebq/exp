@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"code.google.com/p/goplan9/plan9"
 	"flag"
 	"fmt"
@@ -109,6 +110,32 @@ type ClientConn struct {
 	iounit uint32
 }
 
+// Information about a given file
+type Stat struct {
+	// Type of the given file
+	Type FileType
+	// Permissions (unix like)
+	Mode uint32
+	// Name of the given file
+	Name string
+	// Time of the last access
+	Atime uint32
+	// Time of the last modification
+	Mtime uint32
+	// Name of the user
+	Uname string
+	// Name of the group
+	Gname string
+	// Size of the file
+	//
+	// 0 means undefined
+	// for directories, should return the number of child nodes
+	// for files, the number of bytes in the file
+	Size uint64
+	// Version of the file
+	Version uint32
+}
+
 // Interface used to navigate, open and close files in the system
 type FileExplorer interface {
 	// Must return the unique identifier for this explorer root.
@@ -130,6 +157,10 @@ type FileExplorer interface {
 	//
 	// The returned byte count will be converted to uint32
 	Read(buf []byte, offset uint64, path uint64) (int, error)
+	// Return the list of ID's for the given path. path will always point to a directory
+	ListDir(path uint64) ([]uint64, error)
+	// Return the information about the given file or directory
+	Stat(path uint64) (*Stat, error)
 	// Return the size of the given file, returning 0, means a file that don't have a
 	// finite size (reading from input devices, like keyboard or serial port)
 	//
@@ -168,7 +199,7 @@ const (
 
 func NewClientConn(conn net.Conn, server *Server, explorer FileExplorer) *ClientConn {
 	cc := &ClientConn{conn: conn, server: server, fileRefs: make(map[uint64]*fileRef),
-		explorer: explorer, fidmap: make(map[uint32]uint64), iounit: 8192}
+		explorer: explorer, fidmap: make(map[uint32]uint64), iounit: 0}
 	return cc
 }
 
@@ -299,15 +330,54 @@ func (c *ClientConn) read(fc *plan9.Fcall) *plan9.Fcall {
 	fc.Type = plan9.Rread
 	if fref, has := c.fidRef(fc.Fid); has {
 		if fref.IsDir() {
-			return c.readdir(fc)
+			return c.readdir(fc, fref)
 		}
 		return c.readfile(fc, fref)
 	}
 	return c.invalidFidErr(fc)
 }
 
-func (c *ClientConn) readdir(fc *plan9.Fcall) *plan9.Fcall {
-	return c.unexpectedErr(fc, fmt.Errorf("directory read isn't ready"))
+func (c *ClientConn) readdir(fc *plan9.Fcall, ref *fileRef) *plan9.Fcall {
+	// if the call have an offset, return 0
+	// since all readdir call's will return the full directory
+	if fc.Offset > 0 {
+		fc.Count = 0
+		return fc
+	}
+	childs, err := c.explorer.ListDir(ref.Path)
+	if err != nil {
+		return c.unexpectedErr(fc, err)
+	}
+	tmpBuf := allocBuffer(int(c.iounit))
+	out := bytes.NewBuffer(tmpBuf[:0])
+	defer discardBuffer(tmpBuf)
+	for _, id := range childs {
+		stat, err := c.explorer.Stat(id)
+		if err != nil {
+			return c.unexpectedErr(fc, err)
+		}
+		dir := plan9.Dir{
+			Qid:    plan9.Qid{Type: uint8(stat.Type), Vers: stat.Version, Path: id},
+			Mode:   plan9.Perm(stat.Mode),
+			Atime:  stat.Atime,
+			Mtime:  stat.Mtime,
+			Length: stat.Size,
+			Uid:    stat.Uname,
+			Gid:    stat.Gname,
+			Name:   stat.Name,
+		}
+		buf, err := dir.Bytes()
+		if err != nil {
+			return c.unexpectedErr(fc, err)
+		}
+		_, err = out.Write(buf)
+		if err != nil {
+			return c.unexpectedErr(fc, err)
+		}
+	}
+	fc.Count = uint32(len(fc.Data))
+	fc.Data = out.Bytes()
+	return fc
 }
 
 func min(values ...int) int {
@@ -325,13 +395,13 @@ func (c *ClientConn) readfile(fc *plan9.Fcall, ref *fileRef) *plan9.Fcall {
 		// return count == 0 to signal EOF to client
 		fc.Count = 0
 	}
-	fc.Data = c.allocBuffer(min(int(c.iounit), int(fc.Count), int(size)))
-	defer c.discardBuffer(fc.Data)
+	fc.Data = allocBuffer(min(int(c.iounit), int(fc.Count), int(size)))
+	defer discardBuffer(fc.Data)
 	n, err := c.explorer.Read(fc.Data, fc.Offset, ref.Path)
 	if err == io.EOF {
 		if n == 0 {
 			// returned EOF without reading anything, should return fc.Count = 0
-			c.discardBuffer(fc.Data)
+			discardBuffer(fc.Data)
 			fc.Data = nil
 			err = nil
 			return fc
@@ -384,11 +454,15 @@ func (c *ClientConn) unexpectedErr(fc *plan9.Fcall, err error) *plan9.Fcall {
 	return fc
 }
 
-func (c *ClientConn) allocBuffer(sz int) []byte {
+func allocBuffer(sz int) []byte {
+	if sz == 0 {
+		// defautl buffer size
+		sz = 8192
+	}
 	return make([]byte, sz)
 }
 
-func (c *ClientConn) discardBuffer(buf []byte) {
+func discardBuffer(buf []byte) {
 	// do nothing,
 	// later, implement a way to reuse this buffer
 }
@@ -514,6 +588,30 @@ func (d dummyExplorer) Sizeof(path uint64) (uint64, error) {
 		return 11, nil // hello world
 	}
 	return 0, fmt.Errorf("can't read file")
+}
+
+func (d dummyExplorer) ListDir(path uint64) ([]uint64, error) {
+	if path != 1 {
+		return nil, fmt.Errorf("not a directory")
+	}
+	return []uint64{2}, nil
+}
+
+func (d dummyExplorer) Stat(path uint64) (*Stat, error) {
+	st := &Stat{}
+	switch path {
+	case 1:
+		st.Type = FTDIR
+		st.Size = 1 // just one file
+		st.Name = "/"
+	case 2:
+		st.Type = FTFILE
+		st.Size = 11 // hello world
+		st.Name = "dummy"
+	default:
+		panic("Stat should only be called with valid path's")
+	}
+	return st, nil
 }
 
 func (d dummyExplorer) Close(path uint64) error {
