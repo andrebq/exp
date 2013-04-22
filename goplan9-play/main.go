@@ -172,6 +172,13 @@ type FileExplorer interface {
 	//
 	// Should return the path of the file
 	Create(parent uint64, info File, perm uint32) (uint64, error)
+	// Write the buf to the given file starting at the offset position
+	//
+	// Should return the number of bytes actually written or an error.
+	//
+	// Returning less bytes than buf will not cause an error to the server, but the client might get a little confused,
+	// it's recommended that if the write can't be completed, this call should block or return an error.
+	Write(dest uint64, buf []byte, offset uint64) (int, error)
 }
 
 // Utility to sort files from a directory
@@ -285,6 +292,8 @@ func (c *ClientConn) process(fc *plan9.Fcall, out chan *plan9.Fcall) {
 		fc = c.clunk(fc)
 	case plan9.Tcreate:
 		fc = c.create(fc)
+	case plan9.Twrite:
+		fc = c.write(fc)
 	default:
 		println("!!!\t", fc.String())
 		fc = nil
@@ -502,7 +511,23 @@ func (c *ClientConn) create(fc *plan9.Fcall) *plan9.Fcall {
 		}
 		fc.Iounit = c.iounit
 		fc.Qid = cref.Qid
+		println("fidmap: ", fmt.Sprintf("%v", c.fidmap))
+		c.unbindFid(fc.Fid)
+		c.bindFid(fc.Fid, cref.Path)
+		println("fidmap: ", fmt.Sprintf("%v", c.fidmap))
 		return fc
+	}
+	return c.invalidFidErr(fc)
+}
+
+func (c *ClientConn) write(fc *plan9.Fcall) *plan9.Fcall {
+	fc.Type = plan9.Rwrite
+	if fref, have := c.fidRef(fc.Fid); have {
+		n, err := c.explorer.Write(fref.Path, fc.Data[:fc.Count], fc.Offset)
+		if err != nil {
+			return c.unexpectedErr(fc, err)
+		}
+		fc.Count = uint32(n)
 	}
 	return c.invalidFidErr(fc)
 }
@@ -577,6 +602,7 @@ func (c *ClientConn) bindFid(fid uint32, path uint64) {
 		delete(c.fidmap, fid)
 		return
 	}
+	println("bindFid: ", fid, path)
 	c.fidmap[fid] = path
 }
 
@@ -704,6 +730,14 @@ func (d *dummyExplorer) Create(parent uint64, file File, perm uint32) (uint64, e
 	d.tmpfiles[file.Name] = path
 	d.tmpdata[path] = allocBuffer(0)
 	return path, nil
+}
+
+func (d *dummyExplorer) Write(path uint64, buf []byte, offset uint64) (int, error) {
+	if offset != 0 {
+		return 0, fmt.Errorf("can't handle offset at this moment")
+	}
+	d.tmpdata[path] = append(d.tmpdata[path], buf...)
+	return len(buf), nil
 }
 
 func (d *dummyExplorer) nameForPath(p uint64) string {
