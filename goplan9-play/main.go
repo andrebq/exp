@@ -17,11 +17,19 @@ var (
 	help   = flag.Bool("h", false, "Help")
 )
 
+// Expose a 9p filesystem
 type Server struct {
 	listener net.Listener
 	explorer FileExplorer
 }
 
+// Open a new server at the given network/address and with the given FileExplorer
+//
+// The explorer is shared between all connections and there is no way for the explorer to identify
+// what client doing the call.
+//
+// This means that all connections will observe the same filesystem. The explorer is responsible
+// to create the bind between a path (uint64) and an actual file (can be a device or syntetic file)
 func NewServer(lnet, laddr string, explorer FileExplorer) (*Server, error) {
 	s := &Server{}
 	l, err := net.Listen(lnet, laddr)
@@ -33,10 +41,12 @@ func NewServer(lnet, laddr string, explorer FileExplorer) (*Server, error) {
 	return s, nil
 }
 
+// Stop the server
 func (s *Server) Close() error {
 	return s.listener.Close()
 }
 
+// Start the server in blocking mode
 func (s *Server) Start() error {
 	for {
 		client, err := s.listener.Accept()
@@ -55,6 +65,7 @@ func (s *Server) handleError(err error, c net.Conn) {
 	log.Printf("Client %v caused error %v", c.RemoteAddr(), err)
 }
 
+// Read calls from a input reader and send them to out
 func readFCall(out chan *plan9.Fcall, done chan signal, err chan error, input io.Reader) {
 loop:
 	for {
@@ -74,6 +85,7 @@ loop:
 	}
 }
 
+// Read calls from input and write them to out
 func writeFCall(out io.Writer, done chan signal, err chan error, input chan *plan9.Fcall) {
 loop:
 	for {
@@ -184,15 +196,22 @@ type FileExplorer interface {
 // Utility to sort files from a directory
 type FileList []File
 
+// Implement sort.Interface
 func (f FileList) Len() int {
 	return len(f)
 }
+
+// Implement sort.Interface
 func (f FileList) Swap(i, j int) {
 	f[i], f[j] = f[j], f[i]
 }
+
+// Implement sort.Interface
 func (f FileList) Less(i, j int) bool {
 	return f[i].Name < f[j].Name
 }
+
+// Search the file list for the given name (no wildcard search)
 func (f FileList) FindExact(name string) (int, bool) {
 	idx := sort.Search(len(f), func(i int) bool {
 		return f[i].Name >= name
@@ -206,7 +225,7 @@ func (f FileList) FindExact(name string) (int, bool) {
 // This is a complement to FileExplorer, to include some search facilities
 //
 // The methods listed here aren't required to implement a full fileserver, but they might be useful if a directory have
-// lot's of child node.
+// many child node.
 type FileFinder interface {
 	FileExplorer
 	// This method should return the File structure for the given name under path.
@@ -230,17 +249,24 @@ func (fr *fileRef) IsDir() bool {
 type FileType uint8
 
 const (
-	FTFILE  = FileType(plan9.QTFILE)
-	FTDIR   = FileType(plan9.QTDIR)
+	// Simple file
+	FTFILE = FileType(plan9.QTFILE)
+	// Directory (have child files)
+	FTDIR = FileType(plan9.QTDIR)
+	// Mount point, at this moment, only the root file use this type
 	FTMOUNT = FileType(plan9.QTMOUNT)
 )
 
+// Mode to open the file
 type FileMode uint8
 
 const (
-	FMREAD  = FileMode(plan9.OREAD)
+	// Read-only
+	FMREAD = FileMode(plan9.OREAD)
+	// Write-only
 	FMWRITE = FileMode(plan9.OWRITE)
-	FMRDWR  = FileMode(plan9.ORDWR)
+	// Read/Write
+	FMRDWR = FileMode(plan9.ORDWR)
 )
 
 func NewClientConn(conn net.Conn, server *Server, explorer FileExplorer) *ClientConn {
