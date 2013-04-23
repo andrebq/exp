@@ -362,7 +362,6 @@ func (c *ClientConn) walk(fc *plan9.Fcall) *plan9.Fcall {
 		//
 		// so, just break here
 		if ft == FTFILE && idx != len(fc.Wname)-1 {
-			println("here")
 			return c.fileNotFoundErr(fc)
 		}
 	}
@@ -511,10 +510,8 @@ func (c *ClientConn) create(fc *plan9.Fcall) *plan9.Fcall {
 		}
 		fc.Iounit = c.iounit
 		fc.Qid = cref.Qid
-		println("fidmap: ", fmt.Sprintf("%v", c.fidmap))
 		c.unbindFid(fc.Fid)
 		c.bindFid(fc.Fid, cref.Path)
-		println("fidmap: ", fmt.Sprintf("%v", c.fidmap))
 		return fc
 	}
 	return c.invalidFidErr(fc)
@@ -523,11 +520,12 @@ func (c *ClientConn) create(fc *plan9.Fcall) *plan9.Fcall {
 func (c *ClientConn) write(fc *plan9.Fcall) *plan9.Fcall {
 	fc.Type = plan9.Rwrite
 	if fref, have := c.fidRef(fc.Fid); have {
-		n, err := c.explorer.Write(fref.Path, fc.Data[:fc.Count], fc.Offset)
+		n, err := c.explorer.Write(fref.Path, fc.Data, fc.Offset)
 		if err != nil {
 			return c.unexpectedErr(fc, err)
 		}
 		fc.Count = uint32(n)
+		return fc
 	}
 	return c.invalidFidErr(fc)
 }
@@ -602,7 +600,6 @@ func (c *ClientConn) bindFid(fid uint32, path uint64) {
 		delete(c.fidmap, fid)
 		return
 	}
-	println("bindFid: ", fid, path)
 	c.fidmap[fid] = path
 }
 
@@ -733,10 +730,14 @@ func (d *dummyExplorer) Create(parent uint64, file File, perm uint32) (uint64, e
 }
 
 func (d *dummyExplorer) Write(path uint64, buf []byte, offset uint64) (int, error) {
-	if offset != 0 {
-		return 0, fmt.Errorf("can't handle offset at this moment")
+	filedata := d.tmpdata[path]
+	if int(offset) != len(buf) {
+		// if the offset isn't the length of file
+		// should move the tail of the file
+		// to the provided offset and then call append
+		filedata = filedata[0:int(offset)]
 	}
-	d.tmpdata[path] = append(d.tmpdata[path], buf...)
+	d.tmpdata[path] = append(filedata, buf...)
 	return len(buf), nil
 }
 
