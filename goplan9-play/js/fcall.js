@@ -68,12 +68,86 @@
 	};
 	exports.MessageType = mt;
 
+	function dumpsome(bindata) {
+		return "<<binary data: len: " + bindata.length + ">>";
+	}
+
 	exports.Fcall.prototype.asString = function() {
 		switch(this.Type) {
 		case mt.Tversion:
 			return sprintf("Tversion tag %d msize %d version '%s'", this.Tag, this.Msize, this.Version);
 		case mt.Rversion:
 			return sprintf("Rversion tag %d msize %d version '%s'", this.Tag, this.Msize, this.Version);
+		case Tauth:
+			return sprintf("Tauth tag %d afid %d uname %s aname %s",
+				this.Tag, this.Afid, this.Uname, this.Aname);
+		case Rauth:
+			return sprintf("Rauth tag %d qid %v", this.Tag, this.Qid);
+		case Tattach:
+			return sprintf("Tattach tag %d fid %d afid %d uname %s aname %s",
+				this.Tag, this.Fid, this.Afid, this.Uname, this.Aname);
+		case Rattach:
+			return sprintf("Rattach tag %d qid %v", this.Tag, this.Qid);
+		case Rerror:
+			return sprintf("Rerror tag %d ename %s", this.Tag, this.Ename);
+		case Tflush:
+			return sprintf("Tflush tag %d oldtag %d", this.Tag, this.Oldtag);
+		case Rflush:
+			return sprintf("Rflush tag %d", this.Tag);
+		case Twalk:
+			return sprintf("Twalk tag %d fid %d newfid %d wname %v",
+				this.Tag, this.Fid, this.Newfid, this.Wname);
+		case Rwalk:
+			return sprintf("Rwalk tag %d wqid %v", this.Tag, this.Wqid);
+		case Topen:
+			return sprintf("Topen tag %d fid %d mode %d", this.Tag, this.Fid, this.Mode);
+		case Ropen:
+			return sprintf("Ropen tag %d qid %v iouint %d", this.Tag, this.Qid, this.Iounit);
+		case Tcreate:
+			return sprintf("Tcreate tag %d fid %d name %s perm %v mode %d",
+				this.Tag, this.Fid, this.Name, this.Perm, this.Mode);
+		case Rcreate:
+			return sprintf("Rcreate tag %d qid %v iouint %d", this.Tag, this.Qid, this.Iounit);
+		case Tread:
+			return sprintf("Tread tag %d fid %d offset %d count %d",
+				this.Tag, this.Fid, this.Offset, this.Count);
+		case Rread:
+			return sprintf("Rread tag %d count %d %s",
+				this.Tag, len(this.Data), dumpsome(this.Data));
+		case Twrite:
+			return sprintf("Twrite tag %d fid %d offset %d count %d %s",
+				this.Tag, this.Fid, this.Offset, len(this.Data), dumpsome(this.Data));
+		case Rwrite:
+			return sprintf("Rwrite tag %d count %d", this.Tag, this.Count);
+		case Tclunk:
+			return sprintf("Tclunk tag %d fid %d", this.Tag, this.Fid);
+		case Rclunk:
+			return sprintf("Rclunk tag %d", this.Tag);
+		case Tremove:
+			return sprintf("Tremove tag %d fid %d", this.Tag, this.Fid);
+		case Rremove:
+			return sprintf("Rremove tag %d", this.Tag);
+		case Tstat:
+			return sprintf("Tstat tag %d fid %d", this.Tag, this.Fid);
+			/*
+			 * some hand work needed here
+		case Rstat:
+			d, err := UnmarshalDir(f.Stat)
+			if err == nil {
+				return fmt.Sprintf("Rstat tag %d stat(%d bytes)",
+					f.Tag, len(f.Stat))
+			}
+			return fmt.Sprintf("Rstat tag %d stat %v", f.Tag, d)
+		case Twstat:
+			d, err := UnmarshalDir(f.Stat)
+			if err == nil {
+				return fmt.Sprintf("Twstat tag %d fid %d stat(%d bytes)",
+					f.Tag, f.Fid, len(f.Stat))
+			}
+			return fmt.Sprintf("Twstat tag %d fid %d stat %v", f.Tag, f.Fid, d)
+		case Rwstat:
+			return fmt.Sprintf("FidRwstat tag %d", f.Tag)
+			*/
 		default:
 			throw "Invalid type";
 		}
