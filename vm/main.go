@@ -5,21 +5,62 @@ import (
 	"os"
 )
 
+type any interface{}
+
+type Object struct {
+	fields map[string]any
+	array []any
+}
+
+func NewObject() *Object {
+	return &Object{
+		fields: make(map[string]any),
+		array: make([]any, 0),
+	}
+}
+
+func (o *Object) writeField(name string, value any) {
+	o.fields[name] = value
+}
+
+func (o *Object) readField(name string) any {
+	value, has := o.fields[name]
+	if !has {
+		panic("field not defined")
+	}
+	return value
+}
+
+func (o *Object) readIndex(idx int) any {
+	return o.array[idx]
+}
+
+func (o *Object) writeIndex(idx int, value any) {
+	o.array[idx] = value
+}
+
+func (o *Object) appendValue(value any) {
+	o.array = append(o.array, value)
+}
+
 type Stack struct {
-	data []interface{}
-	register map[string]interface{}
+	data []any
+	register map[string]any
+	memory map[int]*Object
+	freeMemory int
 }
 
 func NewStack() *Stack {
-	return &Stack{data: make([]interface{}, 0),
-		register: make(map[string]interface{})}
+	return &Stack{data: make([]any, 0),
+		register: make(map[string]any),
+		memory: make(map[int]*Object)}
 }
 
-func (s *Stack) pushData(d interface{}) {
+func (s *Stack) pushData(d any) {
 	s.data = append(s.data, d)
 }
 
-func (s *Stack) popData() interface{} {
+func (s *Stack) popData() any {
 	if len(s.data) == 0 {
 		panic("stack empty")
 	}
@@ -28,11 +69,11 @@ func (s *Stack) popData() interface{} {
 	return d
 }
 
-func (s *Stack) writeRegister(name string, data interface{}) {
+func (s *Stack) writeRegister(name string, data any) {
 	s.register[name] = data
 }
 
-func (s *Stack) readRegister(name string) interface{} {
+func (s *Stack) readRegister(name string) any {
 	d, has := s.register[name]
 	if !has {
 		panic("register not loaded")
@@ -40,8 +81,8 @@ func (s *Stack) readRegister(name string) interface{} {
 	return d
 }
 
-func pushInt(s *Stack, literal int) {
-	s.pushData(literal)
+func pushInt(s *Stack, literal any) {
+	s.pushData(literal.(int))
 }
 
 func addInt(s *Stack) {
@@ -50,12 +91,18 @@ func addInt(s *Stack) {
 	pushInt(s, a+b)
 }
 
-func store(s *Stack, name string) {
-	s.writeRegister(name, s.popData())
+func allocObj(s *Stack) {
+	s.freeMemory++
+	s.memory[s.freeMemory] = NewObject()
+	pushInt(s, s.freeMemory)
 }
 
-func load(s *Stack, name string) {
-	s.pushData(s.readRegister(name))
+func store(s *Stack, name any) {
+	s.writeRegister(name.(string), s.popData())
+}
+
+func load(s *Stack, name any) {
+	s.pushData(s.readRegister(name.(string)))
 }
 
 func printTop(s *Stack) {
