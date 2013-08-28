@@ -9,17 +9,21 @@ type any interface{}
 
 type Object struct {
 	fields map[string]any
-	array []any
+	array  []any
 }
 
 func NewObject() *Object {
 	return &Object{
 		fields: make(map[string]any),
-		array: make([]any, 0),
+		array:  make([]any, 0),
 	}
 }
 
 func (o *Object) writeField(name string, value any) {
+	switch value.(type) {
+	case Object, *Object:
+		panic("field cannot be a object. only a ref to another object")
+	}
 	o.fields[name] = value
 }
 
@@ -44,19 +48,23 @@ func (o *Object) appendValue(value any) {
 }
 
 type Stack struct {
-	data []any
-	register map[string]any
-	memory map[int]*Object
+	data       []any
+	register   map[string]any
+	memory     map[int]*Object
 	freeMemory int
 }
 
 func NewStack() *Stack {
 	return &Stack{data: make([]any, 0),
 		register: make(map[string]any),
-		memory: make(map[int]*Object)}
+		memory:   make(map[int]*Object)}
 }
 
 func (s *Stack) pushData(d any) {
+	switch d.(type) {
+	case Object, *Object:
+		panic("stack cannot hold objects. only refs to objects")
+	}
 	s.data = append(s.data, d)
 }
 
@@ -95,6 +103,9 @@ func allocObj(s *Stack) {
 	s.freeMemory++
 	s.memory[s.freeMemory] = NewObject()
 	pushInt(s, s.freeMemory)
+}
+
+func writeField(s *Stack, name any, value any) {
 }
 
 func store(s *Stack, name any) {
