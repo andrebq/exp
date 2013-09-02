@@ -10,7 +10,7 @@ import (
 
 type signal struct{}
 
-type method func() (interface{}, error)
+type method func(*Broker) (interface{}, error)
 
 type brokerMessage struct {
 	request method
@@ -20,22 +20,22 @@ type brokerMessage struct {
 }
 
 // Hold all websocket sessions that are running at this moment
-type SessionBroker struct {
+type Broker struct {
 	list []*Session
 	done chan signal
 }
 
-func NewSessionBroker() *SessionBroker {
-	s := &SessionBroker{
+func NewBroker() *Broker {
+	s := &Broker{
 		list: make([]*Session, 0),
 	}
 	go s.loop()
 }
 
-func (s *SessionBroker) CreateSession(cli websocket.Conn) (*Session, error) {
+func (s *Broker) CreateSession(cli websocket.Conn) (*Session, error) {
 }
 
-func (s *SessionBroker) createMessage(m method) *brokerMessage {
+func (s *Broker) createMessage(m method) *brokerMessage {
 	ret := brokerMessage {
 		request: m,
 		completed: make(chan signal, 0),
@@ -45,7 +45,7 @@ func (s *SessionBroker) createMessage(m method) *brokerMessage {
 	return ret
 }
 
-func (s *SessionBroker) loop() {
+func (s *Broker) loop() {
 loop:
 	for {
 		select {
@@ -64,7 +64,7 @@ type Session struct {
 	Backend *url.URL
 }
 
-var broker = NewSessionBroker()
+var broker = NewBroker()
 
 func handleWebSocket(conn websocket.Conn) {
 	session := broker.CreateSession(conn)
