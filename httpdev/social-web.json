@@ -1,0 +1,6 @@
+{
+	"userAddress": "0.0.0.0:8082",
+	"serverAddress": "http://localhost:8081/",
+	"programPath":"c:\\gopath\\src\\social\\web\\web.exe",
+	"arguments":[]
+}
