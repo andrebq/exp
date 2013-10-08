@@ -1,4 +1,5 @@
 package glex
+
 /*Copyright (c) 2012 André Luiz Alves Moraes
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
@@ -9,8 +10,8 @@ import (
 	"testing"
 )
 
-// Ensure that all errors are nil, if not,
-// log all of them into t
+// Ensure that all errors are nil, if not,
+// log all of them into t
 func must(t *testing.T, errors ...error) (valid bool) {
 	valid = true
 	for _, e := range errors {
