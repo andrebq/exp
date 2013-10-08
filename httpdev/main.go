@@ -1,32 +1,35 @@
 package main
+
 // httpdev is a reverse proxy that checks if your binary
 // has changed since the program started, and if it has,
 // the system will restart it
 
 import (
-	"os"
-	"os/exec"
 	"encoding/json"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"os/exec"
 	"time"
 )
 
 type config struct {
-	UserAddress string
+	UserAddress   string
 	ServerAddress string
-	ProgramPath string
-	Arguments []string
-	LastRestart os.FileInfo
-	backendUrl *url.URL
-	cmd *exec.Cmd
+	ProgramPath   string
+	Arguments     []string
+	LastRestart   os.FileInfo
+	backendUrl    *url.URL
+	cmd           *exec.Cmd
 }
 
 func loadConfig(file string) (*config, error) {
 	cfg, err := os.Open(file)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	dec := json.NewDecoder(cfg)
 	serverConfig := &config{}
 	err = dec.Decode(serverConfig)
@@ -47,7 +50,7 @@ func startBackend(cfg *config) error {
 		return err
 	}
 	cfg.LastRestart = fi
-	go func(){
+	go func() {
 		log.Printf("starting process...")
 		cfg.cmd.Stderr = os.Stderr
 		cfg.cmd.Stdout = os.Stdout
@@ -55,13 +58,15 @@ func startBackend(cfg *config) error {
 			log.Printf("process returned error: %v", err)
 		}
 	}()
-	time.Sleep(5*time.Second)
+	time.Sleep(5 * time.Second)
 	return nil
 }
 
 func wasChanged(cfg *config) bool {
 	fi, err := os.Stat(cfg.ProgramPath)
-	if err != nil { return false }
+	if err != nil {
+		return false
+	}
 	return fi.ModTime().After(cfg.LastRestart.ModTime())
 }
 
@@ -73,7 +78,7 @@ func killBackend(cfg *config) error {
 	return cfg.cmd.Process.Kill()
 }
 
-func setupReverseProxy(cfg *config) chan *checkUpdate{
+func setupReverseProxy(cfg *config) chan *checkUpdate {
 	ret := make(chan *checkUpdate, 0)
 	http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		check := &checkUpdate{done: make(chan signal)}
@@ -87,7 +92,9 @@ func setupReverseProxy(cfg *config) chan *checkUpdate{
 
 type signal struct{}
 
-var ( doneSignal = signal{} )
+var (
+	doneSignal = signal{}
+)
 
 type checkUpdate struct {
 	done chan signal
