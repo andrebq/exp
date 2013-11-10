@@ -486,6 +486,7 @@ func (c *ClientConn) readfile(fc *plan9.Fcall, ref *fileRef) *plan9.Fcall {
 		// trying to reading past the end of file.
 		// return count == 0 to signal EOF to client
 		fc.Count = 0
+		return fc
 	}
 	fc.Data = allocBuffer(min(int(c.iounit), int(fc.Count), int(size)))
 	defer discardBuffer(fc.Data)
@@ -507,6 +508,7 @@ func (c *ClientConn) readfile(fc *plan9.Fcall, ref *fileRef) *plan9.Fcall {
 		return c.unexpectedErr(fc, err)
 	}
 	fc.Count = uint32(n)
+	fc.Data = fc.Data[:fc.Count]
 	return fc
 }
 
