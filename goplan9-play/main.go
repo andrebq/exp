@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	listen = flag.String("listen", "127.0.0.1:5640", "Address to listen")
+	listen = flag.String("listen", "0.0.0.0:5640", "Address to listen")
 	help   = flag.Bool("h", false, "Help")
 )
 
@@ -321,6 +321,8 @@ func (c *ClientConn) process(fc *plan9.Fcall, out chan *plan9.Fcall) {
 		fc = c.create(fc)
 	case plan9.Twrite:
 		fc = c.write(fc)
+	case plan9.Tauth:
+		fc = noauth(fc)
 	default:
 		println("!!!\t", fc.String())
 		fc = nil
@@ -329,6 +331,12 @@ func (c *ClientConn) process(fc *plan9.Fcall, out chan *plan9.Fcall) {
 		println("<<<\t", fc.String())
 	}
 	out <- fc
+}
+
+func noauth(fc *plan9.Fcall) *plan9.Fcall {
+	fc.Type = plan9.Rerror
+	fc.Ename = "no auth requried"
+	return fc
 }
 
 func (c *ClientConn) version(fc *plan9.Fcall) *plan9.Fcall {
