@@ -2,134 +2,56 @@ package main
 
 import (
 	"fmt"
-	"os"
 )
 
-type any interface{}
+type NodeType byte
+const (
+	SYM = NodeType(1)
+	STR = NodeType(2)
+	NUM = NodeType(3)
+	OEXP = NodeType(4)
+	CEXP = NodeType(5)
+)
 
-type Object struct {
-	fields map[string]any
-	array  []any
-}
-
-func NewObject() *Object {
-	return &Object{
-		fields: make(map[string]any),
-		array:  make([]any, 0),
+func (nt NodeType) String() string {
+	switch nt {
+	case SYM: return "sym"
+	case STR: return "str"
+	case NUM: return "num"
+	case OEXP: return "oexp"
+	case CEXP: return "cexp"
+	default:
+		panic("not reached")
 	}
 }
 
-func (o *Object) writeField(name string, value any) {
-	switch value.(type) {
-	case Object, *Object:
-		panic("field cannot be a object. only a ref to another object")
-	}
-	o.fields[name] = value
+type Node struct {
+	Kind NodeType
+	Text string
 }
 
-func (o *Object) readField(name string) any {
-	value, has := o.fields[name]
-	if !has {
-		panic("field not defined")
-	}
-	return value
+func NewNode(kind NodeType, text string) *Node {
+	return &Node{Kind: kind, Text: text}
 }
 
-func (o *Object) readIndex(idx int) any {
-	return o.array[idx]
-}
-
-func (o *Object) writeIndex(idx int, value any) {
-	o.array[idx] = value
-}
-
-func (o *Object) appendValue(value any) {
-	o.array = append(o.array, value)
-}
-
-type Stack struct {
-	data       []any
-	register   map[string]any
-	memory     map[int]*Object
-	freeMemory int
-}
-
-func NewStack() *Stack {
-	return &Stack{data: make([]any, 0),
-		register: make(map[string]any),
-		memory:   make(map[int]*Object)}
-}
-
-func (s *Stack) pushData(d any) {
-	switch d.(type) {
-	case Object, *Object:
-		panic("stack cannot hold objects. only refs to objects")
-	}
-	s.data = append(s.data, d)
-}
-
-func (s *Stack) popData() any {
-	if len(s.data) == 0 {
-		panic("stack empty")
-	}
-	d := s.data[len(s.data)-1]
-	s.data = s.data[:len(s.data)-1]
-	return d
-}
-
-func (s *Stack) writeRegister(name string, data any) {
-	s.register[name] = data
-}
-
-func (s *Stack) readRegister(name string) any {
-	d, has := s.register[name]
-	if !has {
-		panic("register not loaded")
-	}
-	return d
-}
-
-func pushInt(s *Stack, literal any) {
-	s.pushData(literal.(int))
-}
-
-func addInt(s *Stack) {
-	a := s.popData().(int)
-	b := s.popData().(int)
-	pushInt(s, a+b)
-}
-
-func allocObj(s *Stack) {
-	s.freeMemory++
-	s.memory[s.freeMemory] = NewObject()
-	pushInt(s, s.freeMemory)
-}
-
-func writeField(s *Stack, name any, value any) {
-}
-
-func store(s *Stack, name any) {
-	s.writeRegister(name.(string), s.popData())
-}
-
-func load(s *Stack, name any) {
-	s.pushData(s.readRegister(name.(string)))
-}
-
-func printTop(s *Stack) {
-	d := s.popData()
-	fmt.Fprintf(os.Stdout, "%v\n", d)
-	s.pushData(d)
+func (n *Node) String() string {
+	return fmt.Sprintf("<%v:%v>", n.Kind, n.Text)
 }
 
 func main() {
-	s := NewStack()
-	pushInt(s, 10)
-	pushInt(s, 20)
-	addInt(s)
-	store(s, "i1")
-	pushInt(s, 10)
-	load(s, "i1")
-	addInt(s)
-	printTop(s)
+	input := "( ab        )\r\n((\r\n()\t))\r\n()"
+	for len(input) > 0 {
+		var node *Node
+		var err error
+		input, node, err = getNode(input)
+		if err != nil {
+			fmt.Printf("error: %v\n", err)
+			break
+		} else {
+			fmt.Printf("node: %v\n", node)
+			if len(input) == 0 {
+				fmt.Printf(">>>EOF")
+			}
+		}
+	}
 }
