@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -34,6 +35,28 @@ func (m *Mount) ReadDir(u *url.URL) ([]os.FileInfo, error) {
 	}
 	defer f.Close()
 	return f.Readdir(-1)
+}
+
+func (m *Mount) CreateOrOpenFileForWrite(u *url.URL) (*os.File, error) {
+	rp := m.realPath(u)
+	stat, err := os.Stat(rp)
+	if os.IsNotExist(err) {
+		// new file
+		d := filepath.Dir(rp)
+		err = os.MkdirAll(d, 0644)
+		if err != nil {
+			return nil, err
+		}
+
+		return os.OpenFile(rp, os.O_CREATE, 0644)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if stat.IsDir() {
+		return nil, fmt.Errorf("%v is a directory", u.Path)
+	}
+	return os.OpenFile(rp, os.O_RDWR, 0644)
 }
 
 type RawFS struct {
@@ -90,10 +113,36 @@ func (r *RawFS) metaForChild(name string, parent *url.URL) *url.URL {
 }
 
 func (r *RawFS) serveFile(w http.ResponseWriter, req *http.Request, info os.FileInfo) {
-	if req.Method != "GET" {
-		http.Error(w, "Only GET at this moment", http.StatusMethodNotAllowed)
+	switch req.Method {
+	case "GET":
+		r.serveGetFile(w, req, info)
+	case "POST", "PUT":
+		r.servePostFile(w, req, info)
+	default:
+		if req.Method != "GET" {
+			http.Error(w, "Only GET/POST/PUT at this moment", http.StatusMethodNotAllowed)
+			return
+		}
+	}
+}
+
+func (r *RawFS) servePostFile(w http.ResponseWriter, req *http.Request, info os.FileInfo) {
+	http.Error(w, "Not implemented yet!", 500)
+	return
+	file, err := r.mount.CreateOrOpenFileForWrite(req.URL)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
 		return
 	}
+	defer file.Close()
+	_, err = io.Copy(file, req.Body)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+}
+
+func (r *RawFS) serveGetFile(w http.ResponseWriter, req *http.Request, info os.FileInfo) {
 	rw, err := r.mount.OpenReadFile(req.URL)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
