@@ -66,10 +66,17 @@ type RawFS struct {
 
 func (r *RawFS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	info, err := r.mount.InfoFromURL(req.URL)
+
+	if req.Method == "POST" {
+		r.serveFile(w, req, info)
+		return
+	}
+
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+
 	if info.IsDir() {
 		r.serveDir(w, req, info)
 	} else {
@@ -127,8 +134,6 @@ func (r *RawFS) serveFile(w http.ResponseWriter, req *http.Request, info os.File
 }
 
 func (r *RawFS) servePostFile(w http.ResponseWriter, req *http.Request, info os.FileInfo) {
-	http.Error(w, "Not implemented yet!", 500)
-	return
 	file, err := r.mount.CreateOrOpenFileForWrite(req.URL)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
