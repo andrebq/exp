@@ -92,19 +92,19 @@ func (r *RawFS) serveDir(w http.ResponseWriter, req *http.Request, info os.FileI
 	}
 	fmt.Fprintf(w,
 		`<!doctype html>
-<html>
+<html itemscope>
 <head>
 	<title>Listing directory: %v</title>
 </head>
 <body>
-	<h1>Listing directory: %v</h1>
+	<h1>Listing directory: <data itemprop="name">%v</data></h1>
 	<ul>`,
 		info.Name(),
 		info.Name())
 
 	for _, child := range childs {
-		fmt.Fprintf(w, `<li><a href="%v">%v</a> <a href="%v">Stat</a></li>`,
-			"./"+child.Name(), child.Name(), r.metaForChild(child.Name(), req.URL))
+		fmt.Fprintf(w, `<li itemscope itemprop="child"><a itemprop="url" href="%v"><span itemprop="name">%v</span></a> Directory? <span itemprop="dir">%v</span> / <a itemprop="metaurl" href="%v">Stat</a></li>`,
+			"./"+child.Name(), child.Name(), child.IsDir(), r.metaForChild(child.Name(), req.URL))
 	}
 
 	fmt.Fprintf(w,
@@ -212,6 +212,13 @@ var (
 )
 
 func index(w http.ResponseWriter, req *http.Request) {
+}
+
+type IndexFS struct {
+	prefix string
+}
+
+func (i *IndexFS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w,
 		`<!doctype html>
 <head>
@@ -219,21 +226,44 @@ func index(w http.ResponseWriter, req *http.Request) {
 </head>
 <body>
 	<dl>
-		<dt>Meta</dt> <dd><a href="./meta/">./meta/</a></dd>
-		<del><dt>Raw</dt> <dd>./raw/</dd></del>
+		<dt>Meta</dt> <dd><a href="./meta/">meta/</a></dd>
+		<dt>Raw</dt> <dd><a href="./raw/">raw/</a></dd>
 	</dl>
 </body>`)
+}
+
+type HttpFS struct {
+	meta *MetaFS
+	raw  *RawFS
+	idx  *IndexFS
+	mux  *http.ServeMux
+}
+
+func NewHttpFS(m *Mount, prefix string) *HttpFS {
+	r := &HttpFS{}
+	prefix = path.Clean(prefix)
+	r.raw = &RawFS{mount: m, metaBase: path.Join(prefix, "/meta/")}
+	r.meta = &MetaFS{mount: m, rawBase: path.Join(prefix, "/raw/")}
+	r.idx = &IndexFS{prefix: prefix}
+	r.mux = http.NewServeMux()
+	r.mux.Handle("/meta/", http.StripPrefix("/meta", r.meta))
+	r.mux.Handle("/raw/", http.StripPrefix("/raw", r.raw))
+	r.mux.Handle("/", r.idx)
+	return r
+}
+
+func (h *HttpFS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	log.Printf("[httpfs]-[%v]-%v", req.Method, req.URL)
+	h.mux.ServeHTTP(w, req)
 }
 
 func main() {
 
 	m := &Mount{baseDir: *baseDir}
-	metafs := &MetaFS{mount: m, rawBase: "/raw"}
-	rawfs := &RawFS{mount: m, metaBase: "/meta"}
+	httpfs := NewHttpFS(m, "/fs/")
 
+	http.Handle("/fs/", http.StripPrefix("/fs", httpfs))
 	http.HandleFunc("/", index)
-	http.Handle("/meta/", http.StripPrefix("/meta/", metafs))
-	http.Handle("/raw/", http.StripPrefix("/raw/", rawfs))
 
 	log.Printf("Starting davd server at %v", *addr)
 	err := http.ListenAndServe(*addr, nil)
