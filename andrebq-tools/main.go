@@ -1,23 +1,25 @@
 package main
 
 import (
-	"flag"
-	"os"
-	"math/big"
 	"crypto/rand"
+	"flag"
 	"fmt"
 	"log"
 	"math"
+	"math/big"
+	"os"
 	"time"
 )
 
 var help = flag.Bool("h", false, "Help")
 var rand32 = flag.Bool("rand32", false, "Print a 32 bit integer random number to stdout")
 var now32 = flag.Bool("now32", false, "Print the 32 bits of time.Now().Unixnano to stdout")
+var echoHttp = flag.Bool("echoHttp", false, "Start the http echo server")
+var echoHttpAddr = flag.String("echoHttpAddr", "0.0.0.0:9090", "Address to start the http echo server")
 
 func main() {
 	flag.Parse()
-	if (*help) {
+	if *help {
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -27,6 +29,9 @@ func main() {
 	}
 	if *now32 {
 		processNow32()
+	}
+	if *echoHttp {
+		startEchoServer(echoHttpAddr)
 	}
 
 	os.Exit(0)
@@ -42,5 +47,5 @@ func processRand32() {
 
 func processNow32() {
 	now := time.Now().UnixNano()
-	fmt.Fprintf(os.Stdout, "%v", int32(now >> 32))
+	fmt.Fprintf(os.Stdout, "%v", int32(now>>32))
 }
