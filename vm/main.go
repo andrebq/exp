@@ -5,21 +5,27 @@ import (
 )
 
 type NodeType byte
+
 const (
-	SYM = NodeType(1)
-	STR = NodeType(2)
-	NUM = NodeType(3)
+	SYM  = NodeType(1)
+	STR  = NodeType(2)
+	NUM  = NodeType(3)
 	OEXP = NodeType(4)
 	CEXP = NodeType(5)
 )
 
 func (nt NodeType) String() string {
 	switch nt {
-	case SYM: return "sym"
-	case STR: return "str"
-	case NUM: return "num"
-	case OEXP: return "oexp"
-	case CEXP: return "cexp"
+	case SYM:
+		return "sym"
+	case STR:
+		return "str"
+	case NUM:
+		return "num"
+	case OEXP:
+		return "oexp"
+	case CEXP:
+		return "cexp"
 	default:
 		panic("not reached")
 	}

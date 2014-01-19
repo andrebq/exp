@@ -27,7 +27,7 @@ func discardWhiteSpace(in string) string {
 	return in
 }
 
-// read the ( that opens a expression, 
+// read the ( that opens a expression,
 // return the text representing the node,
 // the tail of the input string,
 // and a bool representing if the value is valid
@@ -84,7 +84,7 @@ func symbol(in string) (string, string, bool) {
 }
 
 // check if the input string matches the required test
-func is(input string, test func(string)(string, string,bool)) (string, string, bool) {
+func is(input string, test func(string) (string, string, bool)) (string, string, bool) {
 	text, tail, ok := test(input)
 	if ok {
 		return text, tail, ok
@@ -95,7 +95,7 @@ func is(input string, test func(string)(string, string,bool)) (string, string, b
 
 func getNode(input string) (string, *Node, error) {
 	input = discardWhiteSpace(input)
-	if _, tail, ok:= is(input, openExp); ok {
+	if _, tail, ok := is(input, openExp); ok {
 		return tail, NewNode(OEXP, "("), nil
 	} else if _, tail, ok := is(input, closeExp); ok {
 		return tail, NewNode(CEXP, ")"), nil
