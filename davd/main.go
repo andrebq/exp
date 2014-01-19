@@ -2,9 +2,9 @@ package main
 
 import (
 	"flag"
+	"github.com/andrebq/exp/httpfs"
 	"log"
 	"net/http"
-	"github.com/andrebq/exp/httpfs"
 )
 
 var (
