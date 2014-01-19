@@ -1,4 +1,4 @@
-package httpfs 
+package httpfs
 
 import (
 	"fmt"
@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 )
 
+// Type Mount is used to represent a local directory and have functions
+// to facilitate the process of reading/writing files to those directories.
 type Mount struct {
 	BaseDir string
 }
@@ -19,14 +21,17 @@ func (m *Mount) realPath(u *url.URL) string {
 	return filepath.Join(m.BaseDir, filepath.FromSlash(u.Path))
 }
 
+// Return the information from the file pointed by the URL
 func (m *Mount) InfoFromURL(u *url.URL) (os.FileInfo, error) {
 	return os.Stat(m.realPath(u))
 }
 
+// Return a file struct ready for reading
 func (m *Mount) OpenReadFile(u *url.URL) (*os.File, error) {
 	return os.Open(m.realPath(u))
 }
 
+// Return the contents of the directory pointed by the given file
 func (m *Mount) ReadDir(u *url.URL) ([]os.FileInfo, error) {
 	f, err := os.Open(m.realPath(u))
 	if err != nil {
@@ -36,6 +41,8 @@ func (m *Mount) ReadDir(u *url.URL) ([]os.FileInfo, error) {
 	return f.Readdir(-1)
 }
 
+// Create a new file (and all the directory strucutre) or open the
+// existing file for writing
 func (m *Mount) CreateOrOpenFileForWrite(u *url.URL) (*os.File, error) {
 	rp := m.realPath(u)
 	stat, err := os.Stat(rp)
@@ -58,11 +65,19 @@ func (m *Mount) CreateOrOpenFileForWrite(u *url.URL) (*os.File, error) {
 	return os.OpenFile(rp, os.O_RDWR, 0644)
 }
 
+// type RawFS allow access to read/write the contents of a file
 type RawFS struct {
 	mount    *Mount
 	metaBase string
 }
 
+// Expose the raw files over HTTP
+//
+// GET: read the contents of the file or directory.
+// POST: write the contents of the file.
+//
+// Directories are exposed using pure HTML and HTML5 microformat
+// for extra information
 func (r *RawFS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	info, err := r.mount.InfoFromURL(req.URL)
 
@@ -157,11 +172,16 @@ func (r *RawFS) serveGetFile(w http.ResponseWriter, req *http.Request, info os.F
 	http.ServeContent(w, req, info.Name(), info.ModTime(), rw)
 }
 
+// Type MetaFS expose the attributes of the FS, things like
+// modtime, ownership, etc..
+//
+// At this momento only GET is supported
 type MetaFS struct {
 	mount   *Mount
 	rawBase string
 }
 
+// Expose the MetaFS over HTTP
 func (m *MetaFS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	info, err := m.mount.InfoFromURL(req.URL)
 	if err != nil {
@@ -205,10 +225,13 @@ func (m *MetaFS) printAsHtml(w http.ResponseWriter, req *http.Request, info os.F
 		info.Name())
 }
 
+// type IndexFS is used just to return the links to
+// MetaFS and RawFS
 type IndexFS struct {
 	prefix string
 }
 
+// Exposes the IndexFS over HTTP
 func (i *IndexFS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w,
 		`<!doctype html>
@@ -223,6 +246,7 @@ func (i *IndexFS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 </body>`)
 }
 
+// type HttpFS is used to group the IndexFS, MetaFS, and the RawFS
 type HttpFS struct {
 	meta *MetaFS
 	raw  *RawFS
@@ -230,6 +254,14 @@ type HttpFS struct {
 	mux  *http.ServeMux
 }
 
+// Create a new HttpFS with read/write access over the given Mount and
+// with the given prefix.
+//
+// Uses should register HttpFS using StripPrefix since the url is taken as-is
+// from the http.Request object without any pre-processing.
+//
+// The sub paths (/meta/, /raw/) are handled internally and the user don't need
+// to worry about them.
 func NewHttpFS(m *Mount, prefix string) *HttpFS {
 	r := &HttpFS{}
 	prefix = path.Clean(prefix)
@@ -243,6 +275,7 @@ func NewHttpFS(m *Mount, prefix string) *HttpFS {
 	return r
 }
 
+// Expose the HttpFS
 func (h *HttpFS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	log.Printf("[httpfs]-[%v]-%v", req.Method, req.URL)
 	h.mux.ServeHTTP(w, req)
