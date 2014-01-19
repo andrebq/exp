@@ -12,11 +12,11 @@ import (
 )
 
 type Mount struct {
-	baseDir string
+	BaseDir string
 }
 
 func (m *Mount) realPath(u *url.URL) string {
-	return filepath.Join(m.baseDir, filepath.FromSlash(u.Path))
+	return filepath.Join(m.BaseDir, filepath.FromSlash(u.Path))
 }
 
 func (m *Mount) InfoFromURL(u *url.URL) (os.FileInfo, error) {

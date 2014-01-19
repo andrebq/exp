@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"github.com/andrebq/exp/httpfs"
 )
 
 var (
@@ -16,8 +17,8 @@ func index(w http.ResponseWriter, req *http.Request) {
 
 func main() {
 
-	m := &Mount{baseDir: *baseDir}
-	httpfs := NewHttpFS(m, "/fs/")
+	m := &httpfs.Mount{BaseDir: *baseDir}
+	httpfs := httpfs.NewHttpFS(m, "/fs/")
 
 	http.Handle("/fs/", http.StripPrefix("/fs", httpfs))
 	http.HandleFunc("/", index)
