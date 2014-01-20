@@ -2,9 +2,28 @@
 <html>
     <head>
     	<title>Index</title>
+	<link rel="stylesheet" href="application/base.css" type="text/css" media="screen" charset="utf-8">
+	<link rel="stylesheet" href="framework/gridster/gridster.css" type="text/css" media="screen" charset="utf-8">
     </head>
-    <body>
-    	<h1>Index</h1>
-	<p><a href="./fs/">Open the fs</a></p>
+    <body class="fill">
+    	<div class="gridster">
+		<ul>
+		</ul>
+	</div>
+
+	<script src="framework/sanemodule.js"></script>
+
+	<!-- javascript framework loading -->
+	<script src="framework/jquery.js"></script>
+	<script src="framework/jquery.hotkeys.js"></script>
+	<script src="framework/gridster/gridster.js"></script>
+
+	<!-- application javascript
+	This list should be kept sorted. No need to use requirejs or
+	other stuff, let's keep things simple. -->
+	<script src="application/context.js"></script>
+	<script src="application/boxbuilder.js"></script>
+	<script src="application/shortcuts.js"></script>
+	<script src="application/index.js"></script>
     </body>
 </html>
