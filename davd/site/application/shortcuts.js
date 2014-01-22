@@ -2,6 +2,7 @@ dependsOn(
 	"../framework/jquery.js",
 	"../framework/jquery.hotkeys.js",
 	"./boxbuilder.js",
+	"./sidebar.js",
 	"./context.js");
 (function(global){
 	var shortcuts = global.shortcuts || (global.shortcuts = {});
