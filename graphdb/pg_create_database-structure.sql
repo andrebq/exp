@@ -48,6 +48,8 @@ create table if not exists keywords (
 		unique (keycode)
 ) with ( oids = false );
 
+alter table keywords owner to graphdb;
+
 
 create table if not exists nodes (
 	nodeid bigint,
@@ -57,9 +59,12 @@ create table if not exists nodes (
 		primary key(nodeid)
 ) with ( oids = false );
 
+alter table nodes owner to graphdb;
+
 create table if not exists nodecontents (
 	nodeid bigint,
-	contents hstore,
+	keycode int not null,
+	contents bytea,
 
 	constraint pk_nodecontents
 		primary key(nodeid),
@@ -68,6 +73,8 @@ create table if not exists nodecontents (
 		foreign key (nodeid)
 		references nodes(nodeid)
 ) with ( oids = false );
+
+alter table nodecontents owner to graphdb;
 
 create table if not exists edges (
 	edgeid bigint,
@@ -87,9 +94,12 @@ create table if not exists edges (
 		references nodes(nodeid)
 ) with ( oids = false );
 
+alter table edges owner to graphdb;
+
 create table if not exists edgecontents (
 	edgeid bigint not null,
-	contents hstore,
+	keycode int not null,
+	contents bytea,
 
 	constraint pk_edgecontents
 		primary key (edgeid),
@@ -98,6 +108,8 @@ create table if not exists edgecontents (
 		foreign key (edgeid)
 		references edges(edgeid)
 ) with ( oids = false );
+
+alter table edgecontents owner to graphdb;
 
 create function fn_keyword (p_keyword char varying(255)) returns integer as $BODY$
 declare
@@ -116,6 +128,8 @@ begin
 	return v_keycode;
 end;
 $BODY$ language plpgsql;
+
+alter function fn_keyword(char varying) owner to graphdb;
 
 select fn_keyword(':core/node_name');
 select fn_keyword(':core/edge_name');
