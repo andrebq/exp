@@ -1,4 +1,4 @@
-﻿create extension if not exists hstore;
+create extension if not exists hstore;
 
 -- drop the keyword index
 drop table if exists keywords;

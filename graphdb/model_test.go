@@ -9,7 +9,7 @@ func TestPutAndGet(t *testing.T) {
 	key := ":valid/key"
 	value := "valid_value"
 	attributes.Put(key, value)
-	
+
 	if found, has := attributes.Get(key); !has {
 		t.Fatalf("Should have found the key %v", key)
 	} else {

@@ -2,4 +2,3 @@
 //
 // This is just a proof-of-concept.
 package graphdb
-

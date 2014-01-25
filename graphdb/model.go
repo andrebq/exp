@@ -1,8 +1,8 @@
 package graphdb
 
 import (
-	"github.com/lib/pq/hstore"
 	"database/sql"
+	"github.com/lib/pq/hstore"
 	"strings"
 )
 
