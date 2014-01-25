@@ -46,3 +46,16 @@ func (pg *PgConn) Reopen() error {
 	}
 	return pg.open()
 }
+
+// GetKeyword can be used to return the valid keyword from the given
+// PgConn. If the keyword already exists in the database nothing is
+// done and the key variable is configured to represent the old keyword.
+//
+// If the keyword is new, the it is created and the new value is
+// configured in the key variable.
+//
+// This function is atomic and don't need to be inside a transaction
+func (pg *PgConn) GetKeyword(key *Keyword) error {
+	row := pg.db.QueryRow("select fn_keyword($1)", key.name)
+	return row.Scan(&(*key).code)
+}

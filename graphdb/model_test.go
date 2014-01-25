@@ -6,7 +6,7 @@ import (
 
 func TestPutAndGet(t *testing.T) {
 	attributes := NewAttributes()
-	key := ":valid/key"
+	key := NewKeyword(":valid/key")
 	value := "valid_value"
 	attributes.Put(key, value)
 
@@ -21,18 +21,9 @@ func TestPutAndGet(t *testing.T) {
 	// all keys MUST START with a ":"
 	// the Put method is smart enough to include the
 	// Prefix but the get method not
-	key = "valid/key/2"
+	key = NewKeyword("valid/key/2")
 
-	attributes.Put(key, value)
-	if found, has := attributes.Get(":" + key); !has {
-		t.Fatalf("The Put method should have placed the :")
-	} else {
-		if value != found {
-			t.Errorf("Expecting %v got %v", value, found)
-		}
-	}
-
-	if _, has := attributes.Get(key); has {
-		t.Fatalf("The Get method shouldn't place the extra :")
+	if key.name[0] != ':' {
+		t.Errorf("NewKeyword should place the extra :")
 	}
 }

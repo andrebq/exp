@@ -13,6 +13,9 @@ drop table if exists nodes;
 
 -- drop the functions
 drop function if exists fn_keyword(p_keyword char varying(255));
+drop function if exists fn_new_node(p_kind integer);
+drop function if exists fn_new_edge(p_source bigint, p_target bigint, p_kind integer);
+drop function if exists fn_node_data(p_node bigint, p_attribute integer, p_data hstore);
 
 drop sequence if exists seq_keywords;
 drop sequence if exists seq_nodes;
@@ -63,8 +66,8 @@ alter table nodes owner to graphdb;
 
 create table if not exists nodecontents (
 	nodeid bigint,
-	keycode int not null,
-	contents bytea,
+	kind integer not null,
+	contents hstore,
 
 	constraint pk_nodecontents
 		primary key(nodeid),
@@ -98,8 +101,8 @@ alter table edges owner to graphdb;
 
 create table if not exists edgecontents (
 	edgeid bigint not null,
-	keycode int not null,
-	contents bytea,
+	kind integer not null,
+	contents hstore,
 
 	constraint pk_edgecontents
 		primary key (edgeid),
@@ -131,5 +134,77 @@ $BODY$ language plpgsql;
 
 alter function fn_keyword(char varying) owner to graphdb;
 
+create function fn_new_node (p_kind integer) returns bigint as $BODY$
+declare
+	p_nodeid bigint;
+begin
+	if (select not exists(select 1 from keywords where keycode = p_kind)) then
+		raise exception 'invalid node kind. it must be a valid keyword';
+	end if;
+
+	select into p_nodeid nextval('seq_nodes');
+
+	insert into nodes(nodeid, kind)
+	values (p_nodeid, p_kind);
+
+	return p_nodeid;
+end;
+$BODY$ language plpgsql;
+
+create function fn_new_edge (p_source bigint, p_target bigint, p_kind integer) returns bigint as $BODY$
+declare
+	p_edgeid bigint;
+begin
+	if (select not exists(select 1 from keywords where keycode = p_kind)) then
+		raise exception 'invalid node kind. it must be a valid keyword';
+	end if;
+
+	select into p_edgeid nextval('seq_edges');
+
+	insert into edges(edgeid, sourceid, targetid, kind)
+	values (p_edgeid, p_start, p_target, p_kind);
+
+	return p_edgeid;
+end;
+$BODY$ language plpgsql;
+
+create function fn_node_data(p_node bigint, p_attribute integer, p_data hstore) returns integer as $BODY$
+declare
+begin
+	if (select not exists(select 1 from keywords where keycode = p_attribute)) then
+		raise exception 'invalid attribute kind. it must be a valid keyword';
+	end if;
+
+	update nodecontents
+	set contents = p_data
+	where nodeid = p_node
+		and kind = p_attribute;
+
+	if found then
+		raise notice 'achou';
+		return 1;
+	else
+		insert into nodecontents(nodeid, kind, contents)
+		values (p_node, p_attribute, p_data);
+		return 2;
+	end if;
+
+	return null;
+end;
+$BODY$ language plpgsql;
+
 select fn_keyword(':core/node_name');
 select fn_keyword(':core/edge_name');
+
+begin;
+
+	do $BODY$
+	declare
+		v_rootid bigint;
+		v_datacode integer;
+	begin
+		select into v_rootid fn_new_node(fn_keyword(':core/rootnode'));
+		select into v_datacode fn_node_data(v_rootid, fn_keyword(':core/metadata'), hstore(array['created_at', cast(current_timestamp as char varying)]));
+	end; $BODY$ language plpgsql;
+
+commit;

@@ -3,6 +3,7 @@ package graphdb
 import (
 	"database/sql"
 	"github.com/lib/pq/hstore"
+	"math"
 	"strings"
 )
 
@@ -15,6 +16,23 @@ type Attributes struct {
 	data *hstore.Hstore
 }
 
+// Keyword define a Graph keyword, keywords are similar
+// to strings but they are stored using much less space
+// in the graph.
+//
+// All Keywords start with a :
+type Keyword struct {
+	name string
+	code int
+}
+
+func NewKeyword(keyword string) Keyword {
+	if !strings.HasPrefix(keyword, ":") {
+		keyword = ":" + keyword
+	}
+	return Keyword{keyword, math.MinInt32}
+}
+
 // Put set the value of the given keywork to
 // the specified attribute
 func NewAttributes() *Attributes {
@@ -24,11 +42,8 @@ func NewAttributes() *Attributes {
 }
 
 // Put save the given value under the given keyword
-func (a *Attributes) Put(keyword, value string) {
-	if !strings.HasPrefix(keyword, ":") {
-		keyword = ":" + keyword
-	}
-	a.data.Map[keyword] = sql.NullString{value, true}
+func (a *Attributes) Put(keyword Keyword, value string) {
+	a.data.Map[keyword.name] = sql.NullString{value, true}
 }
 
 // Get return the value at the keyword and a boolean.
@@ -41,8 +56,8 @@ func (a *Attributes) Put(keyword, value string) {
 //	if has { /* the value was found */ }
 //	else { /* value wasn't fount */ }
 //
-func (a *Attributes) Get(keyword string) (string, bool) {
-	if val, has := a.data.Map[keyword]; has {
+func (a *Attributes) Get(keyword Keyword) (string, bool) {
+	if val, has := a.data.Map[keyword.name]; has {
 		if val.Valid {
 			return val.String, true
 		}
