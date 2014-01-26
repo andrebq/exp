@@ -28,21 +28,21 @@ create sequence seq_keywords
 	increment by 1
 	no minvalue
 	no maxvalue
-	cache 10
+	cache 1
 	cycle;
 
 create sequence seq_nodes
 	increment by 1
 	no minvalue
 	no maxvalue
-	cache 10
+	cache 1
 	cycle;
 
 create sequence seq_edges
 	increment by 1
 	no minvalue
 	no maxvalue
-	cache 10
+	cache 1
 	cycle;
 
 create table if not exists keywords (
