@@ -1,4 +1,13 @@
-create extension if not exists hstore;
+-- drop the functions
+drop function if exists fn_keyword(p_keyword char varying(255));
+drop function if exists fn_keyword_code (p_code integer);
+drop function if exists fn_new_node(p_kind integer);
+drop function if exists fn_new_edge(p_source bigint, p_target bigint, p_kind integer);
+drop function if exists fn_node_data(p_node bigint, p_attribute integer, p_data char varying);
+drop function if exists fn_fetch_node_with_data(p_nodeid bigint);
+
+-- drop the views
+drop view if exists vw_node_with_contents;
 
 -- drop the keyword index
 drop table if exists keywords;
@@ -10,12 +19,6 @@ drop table if exists edgecontents;
 -- drop graph tables
 drop table if exists edges;
 drop table if exists nodes;
-
--- drop the functions
-drop function if exists fn_keyword(p_keyword char varying(255));
-drop function if exists fn_new_node(p_kind integer);
-drop function if exists fn_new_edge(p_source bigint, p_target bigint, p_kind integer);
-drop function if exists fn_node_data(p_node bigint, p_attribute integer, p_data hstore);
 
 drop sequence if exists seq_keywords;
 drop sequence if exists seq_nodes;
@@ -51,8 +54,10 @@ create table if not exists keywords (
 		unique (keycode)
 ) with ( oids = false );
 
-alter table keywords owner to graphdb;
+create index idx_keywords_word on keywords(keyword);
+create index idx_keywords_code on keywords(keycode);
 
+alter table keywords owner to graphdb;
 
 create table if not exists nodes (
 	nodeid bigint,
@@ -67,7 +72,7 @@ alter table nodes owner to graphdb;
 create table if not exists nodecontents (
 	nodeid bigint,
 	kind integer not null,
-	contents hstore,
+	contents char varying,
 
 	constraint pk_nodecontents
 		primary key(nodeid),
@@ -102,7 +107,7 @@ alter table edges owner to graphdb;
 create table if not exists edgecontents (
 	edgeid bigint not null,
 	kind integer not null,
-	contents hstore,
+	contents char varying,
 
 	constraint pk_edgecontents
 		primary key (edgeid),
@@ -113,6 +118,12 @@ create table if not exists edgecontents (
 ) with ( oids = false );
 
 alter table edgecontents owner to graphdb;
+
+create view vw_node_with_contents as
+	select n.nodeid, n.kind, nc.kind attr, nc.contents
+	from nodes n
+		inner join nodecontents nc
+			on nc.nodeid = n.nodeid;
 
 create function fn_keyword (p_keyword char varying(255)) returns integer as $BODY$
 declare
@@ -133,6 +144,20 @@ end;
 $BODY$ language plpgsql;
 
 alter function fn_keyword(char varying) owner to graphdb;
+
+create function fn_keyword_code(p_keycode integer) returns char varying as $BODY$
+declare
+	v_keyword char varying;
+begin
+	select keyword into v_keyword
+	from keywords
+	where keycode = p_keycode;
+
+	return v_keyword;
+end;
+$BODY$ language plpgsql;
+
+alter function fn_keyword_code(integer) owner to graphdb;
 
 create function fn_new_node (p_kind integer) returns bigint as $BODY$
 declare
@@ -168,7 +193,7 @@ begin
 end;
 $BODY$ language plpgsql;
 
-create function fn_node_data(p_node bigint, p_attribute integer, p_data hstore) returns integer as $BODY$
+create function fn_node_data(p_node bigint, p_attribute integer, p_data char varying) returns integer as $BODY$
 declare
 begin
 	if (select not exists(select 1 from keywords where keycode = p_attribute)) then
@@ -193,6 +218,13 @@ begin
 end;
 $BODY$ language plpgsql;
 
+create function fn_fetch_node_with_data(p_nodeid bigint) returns setof vw_node_with_contents as $BODY$
+begin
+	return query select * from vw_node_with_contents where nodeid = p_nodeid;
+	return;
+end;
+$BODY$ language plpgsql;
+
 select fn_keyword(':core/node_name');
 select fn_keyword(':core/edge_name');
 
@@ -204,7 +236,7 @@ begin;
 		v_datacode integer;
 	begin
 		select into v_rootid fn_new_node(fn_keyword(':core/rootnode'));
-		select into v_datacode fn_node_data(v_rootid, fn_keyword(':core/metadata'), hstore(array['created_at', cast(current_timestamp as char varying)]));
+		select into v_datacode fn_node_data(v_rootid, fn_keyword(':core/metadata/created_at'), cast(current_timestamp as char varying));
 	end; $BODY$ language plpgsql;
 
 commit;

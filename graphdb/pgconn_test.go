@@ -87,4 +87,55 @@ func TestCreateKeyword(t *testing.T) {
 	if key.code <= 0 {
 		t.Errorf("key.code should be positive but got %v", key.code)
 	}
+
+	if val, has := pg.keywordCache.byName(key.name); !has {
+		t.Errorf("key should be in the cache")
+	} else {
+		if val.name != key.name || val.code != key.code {
+			t.Errorf("Cache is different from actual. cache: %v actual: %v",
+				val, key)
+		}
+	}
+}
+
+func TestSaveNode(t *testing.T) {
+	node := NewNode(NewKeyword(":users"))
+	node.Set(NewKeyword(":core/name"), "gopher")
+
+	user, pwd := postgresUser(t)
+	pg := createPgConn(user, pwd, "localhost", "graphdb_1", "disable", t)
+	createDbStructure(pg, t)
+	defer pg.Close()
+
+	err := pg.SaveNode(node)
+	if err != nil {
+		t.Fatalf("Error saving node: %v", err)
+	}
+
+	if !node.ValidId() {
+		t.Errorf("Id should be valid. but got: %v", node.Id)
+	}
+}
+
+func TestFecthNode(t *testing.T) {
+	user, pwd := postgresUser(t)
+	pg := createPgConn(user, pwd, "localhost", "graphdb_1", "disable", t)
+	createDbStructure(pg, t)
+	defer pg.Close()
+
+	node := NewNode(NewKeyword(":core/rootnode"))
+	node.Id = 1
+
+	err := pg.FetchNode(node)
+	if err != nil {
+		t.Fatalf("Error reading node. %v", err)
+	}
+
+	if node.ContentSize() != 1 {
+		t.Errorf("Content size should be %v but got %v", 1, node.ContentSize())
+	}
+
+	if _, has := node.Get(NewKeyword(":core/metadata/created_at")); !has {
+		t.Errorf("Unable to get keyword: %v", NewKeyword(":core/metadata/created_at"))
+	}
 }

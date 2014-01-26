@@ -25,7 +25,7 @@ func TestNodeContents(t *testing.T) {
 	kind := NewKeyword("kinds/user")
 	node := NewNode(kind).Set(key, "gopher")
 
-	if node.Get(key) != "gopher" {
+	if val, has := node.Get(key); !has || val != "gopher" {
 		// keywords are invalid
 		t.Errorf("attribute not found")
 	}

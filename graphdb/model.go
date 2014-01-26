@@ -24,6 +24,10 @@ func NewKeyword(keyword string) Keyword {
 	return Keyword{keyword, math.MinInt32}
 }
 
+func newKeyword(code int) Keyword {
+	return Keyword{code: code}
+}
+
 func (k Keyword) Equals(other *Keyword) bool {
 	if k.code <= 0 || other.code <= 0 {
 		// check the name
@@ -79,13 +83,17 @@ func (n *Node) Set(kind Keyword, propValue string) *Node {
 	return n
 }
 
-func (n *Node) Get(kind Keyword) string {
+func (n *Node) Get(kind Keyword) (string, bool) {
 	val := n.Value(kind)
 	if val == nil {
-		return ""
+		return "", false
 	} else {
-		return val.Get()
+		return val.Get(), true
 	}
+}
+
+func (n *Node) ValidId() bool {
+	return n.Id > 0
 }
 
 func (n *Node) Value(kind Keyword) *NodeContent {
@@ -95,4 +103,8 @@ func (n *Node) Value(kind Keyword) *NodeContent {
 		}
 	}
 	return nil
+}
+
+func (n *Node) ContentSize() int {
+	return len(n.contents)
 }
