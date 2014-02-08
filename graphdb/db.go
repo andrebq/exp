@@ -18,9 +18,17 @@ const (
 		code integer primary key autoincrement,
 		name text not null unique
 	)`
+	sqlNodeTable = ` create table if not exists nodes (
+		code integer primary key autoincrement,
+		kind integer not null,
+		contents blob
+	)`
 	sqlInsertKeyword = `insert into keywords (name) values (?)`
 	sqlKeywordByName = `select code, name from keywords where name = ?`
 	sqlKeywordByCode = `select code, name form keywords where code = ?`
+	sqlInsertNode = `insert into nodes (kind, contents) values (?, ?)`
+	sqlNodeByCode = `select code, kind, contents from nodes where code = ?`
+	sqlNodeByKind = `select code, kind, contents from nodes where kind = ?`
 )
 
 type DB struct {

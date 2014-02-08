@@ -1,0 +1,16 @@
+hero.png image from:
+
+http://opengameart.org/content/xeon-ultimate-smash-friends
+
+Original license:
+
+CC-BY-3.0 (http://creativecommons.org/licenses/by/3.0/)
+
+Original filename:
+
+http://opengameart.org/sites/default/files/xeonsheet.bmp
+
+Modifications:
+
+* Removed the black box around some sprites
+* Converted from .bmp to .png

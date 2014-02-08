@@ -16,6 +16,7 @@ var rand32 = flag.Bool("rand32", false, "Print a 32 bit integer random number to
 var now32 = flag.Bool("now32", false, "Print the 32 bits of time.Now().Unixnano to stdout")
 var echoHttp = flag.Bool("echoHttp", false, "Start the http echo server")
 var echoHttpAddr = flag.String("echoHttpAddr", "0.0.0.0:9090", "Address to start the http echo server")
+var splitImage = flag.String("splitImage", "", "SpritDecomposer xml output file")
 
 func main() {
 	flag.Parse()
@@ -30,6 +31,9 @@ func main() {
 	if *now32 {
 		processNow32()
 	}
+	if *splitImage != "" {
+		splitIt(*splitImage)
+	}
 	if *echoHttp {
 		startEchoServer(echoHttpAddr)
 	}
@@ -42,10 +46,10 @@ func processRand32() {
 	if err != nil {
 		log.Fatalf("Error creating a random 32 bit number. %v", err)
 	}
-	fmt.Fprintf(os.Stdout, "%v", int32(val.Int64()))
+	fmt.Fprintf(os.Stdout, "%v\n", int32(val.Int64()))
 }
 
 func processNow32() {
 	now := time.Now().UnixNano()
-	fmt.Fprintf(os.Stdout, "%v", int32(now>>32))
+	fmt.Fprintf(os.Stdout, "%v\n", int32(now>>32))
 }
