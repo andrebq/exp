@@ -4,6 +4,26 @@ package chipmunk
 // #include "chipmunk/chipmunk.h"
 import "C"
 
+import (
+	"math"
+)
+
+// Layer used by chipmunk
+type Layer uint
+
+const (
+	// NEGATE_LAYER is used to negate a given layer
+	NEGATE_LAYER = Layer(uint(math.MaxUint32))
+
+	// ALL_LAYERS indicates that a shape is in every layer
+	ALL_LAYERS = Layer(C.CP_ALL_LAYERS)
+)
+
+// Return the negated version of this layer
+func (l Layer) Not() Layer {
+	return Layer(l ^ NEGATE_LAYER)
+}
+
 type Vect C.cpVect
 
 type Space struct {
@@ -47,6 +67,18 @@ func (s *Space) AddShape(shape Shape) Shape {
 		C.cpSpaceAddShape(s.s, shape.shape)}
 }
 
+func (s *Space) SetCollisionSlop(value float32) {
+	C.cpSpaceSetCollisionSlop(s.s, f(value))
+}
+
+func (s *Space) SetIterations(count int) {
+	C.cpSpaceSetIterations(s.s, C.int(count))
+}
+
+func (s *Space) SetSleepTimeThreshold(value float32) {
+	C.cpSpaceSetSleepTimeThreshold(s.s, f(value))
+}
+
 func (s *Space) AddBody(body Body) Body {
 	return Body{
 		C.cpSpaceAddBody(s.s, body.body)}
@@ -78,6 +110,14 @@ func NewCircleShape(body Body, radius float32, center Vect) Shape {
 
 func (s *Shape) SetFriction(val float32) {
 	C.cpShapeSetFriction(s.shape, f(val))
+}
+
+func (s *Shape) SetElasticity(val float32) {
+	C.cpShapeSetElasticity(s.shape, f(val))
+}
+
+func (s *Shape) SetLayers(layer Layer) {
+	C.cpShapeSetLayers(s.shape, C.cpLayers(C.uint(layer)))
 }
 
 func (s *Shape) Free() {
