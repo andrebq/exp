@@ -54,6 +54,10 @@ func MomentForCircle(mass, innerDiameter, outerDiameter float32, offset Vect) fl
 	return float32(C.cpMomentForCircle(f(mass), f(innerDiameter), f(outerDiameter), C.cpVect(offset)))
 }
 
+func MomentForBox(mass, width, height float32) float32 {
+	return float32(C.cpMomentForBox(f(mass), f(width), f(height)))
+}
+
 func NewSpace() Space {
 	return Space{s: C.cpSpaceNew()}
 }
@@ -92,6 +96,20 @@ func (s *Space) Step(timeStep float32) {
 	C.cpSpaceStep(s.s, f(timeStep))
 }
 
+// Run the simulation for at least totalSeconds.
+//
+// In order to keep the fixed timestep if totalSeconds / timeStep != 0
+// the total number of seconds simulated might be totalSeconds + timeStep seconds
+// of simulation.
+//
+// The number of seconds here isn't related to the number of wall clock time, but
+// instead this means how many seconds on the simulation should be consumed
+func (s *Space) StepSeconds(totalSeconds, timeStep float32) {
+	for i := float32(0); i < totalSeconds; i += timeStep {
+		s.Step(timeStep)
+	}
+}
+
 func (s *Space) Free() {
 	C.cpSpaceFree(s.s)
 }
@@ -105,6 +123,12 @@ func NewSegmentShape(body Body, a, b Vect, radius float32) Shape {
 func NewCircleShape(body Body, radius float32, center Vect) Shape {
 	return Shape{
 		shape: C.cpCircleShapeNew(body.body, f(radius), C.cpVect(center)),
+	}
+}
+
+func NewBoxShape(body Body, width, height float32) Shape {
+	return Shape{
+		shape: C.cpBoxShapeNew(body.body, f(width), f(height)),
 	}
 }
 
