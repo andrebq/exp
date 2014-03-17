@@ -80,6 +80,9 @@ func TestApplyForce(t *testing.T) {
 	bd.AllowSleep = false
 
 	m_body := world.CreateBody(&bd)
+	if m_body == nil {
+		t.Fatalf("unable to create body with def: %v", bd)
+	}
 	m_body.CreateFixture(sd1)
 	m_body.CreateFixture(sd2)
 
@@ -113,7 +116,9 @@ func TestApplyForce(t *testing.T) {
 		jd.MaxForce = mass * gravity
 		jd.MaxTorque = mass * radius * gravity
 
-		world.CreateJoint(&jd)
+		if world.CreateJoint(&jd) == nil {
+			t.Fatalf("unable to create joint using def: %v", jd)
+		}
 	}
 }
 

@@ -10,7 +10,16 @@ type Transform struct {
 }
 
 func NewTransform() Transform {
-	return Transform{}
+	return Transform{
+		Q: IdentityRotation(),
+	}
+}
+
+func NewTransformFromPosAngle(pos glm.Vector2, angle float32) Transform {
+	return Transform{
+		P: pos,
+		Q: RotationFromAngle(angle),
+	}
 }
 
 func (t *Transform) MulTo(v glm.Vector2) glm.Vector2 {

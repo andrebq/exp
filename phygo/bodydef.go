@@ -25,12 +25,14 @@ var (
 )
 
 type BodyDef struct {
-	Position       glm.Vector2
-	Type           BodyType
-	AngularDamping float32
-	LinearDamping  float32
-	Angle          float32
-	AllowSleep     bool
+	Position        glm.Vector2
+	Type            BodyType
+	AngularDamping  float32
+	LinearDamping   float32
+	Angle           float32
+	AllowSleep      bool
+	LinearVelocity  glm.Vector2
+	AngularVelocity float32
 }
 
 func NewBodyDef() BodyDef {
