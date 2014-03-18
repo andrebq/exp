@@ -1,8 +1,15 @@
 package phygo
 
 type Fixture struct {
-	Density float32
-	Next    *Fixture
+	Next        *Fixture
+	Shape       *Shape
+	proxyList   proxyList
+	Density     float32
+	Friction    float32
+	IsSensor    bool
+	UserData    uint64
+	Restitution float32
+	Filter      Filter
 }
 
 type proxyList []FixtureProxy
@@ -19,6 +26,10 @@ func (pl *proxyList) alloc() *FixtureProxy {
 	return &slice[len(slice)-1]
 }
 
+func (pl *proxyList) reset() {
+	*pl = make([]FixtureProxy, 0, 1)
+}
+
 func FixtureFromDef(def *FixtureDef, fix *Fixture) {
 	fix.Friction = def.Friction
 	fix.Restitution = def.Restitution
@@ -32,8 +43,8 @@ func FixtureFromDef(def *FixtureDef, fix *Fixture) {
 	fix.proxyList.reset()
 	for i := 0; i < childCount; i++ {
 		proxy := fix.proxyList.alloc()
-		proxy.fixture = nil
-		proxy.proxyId = NullProxy
+		proxy.Fixture = nil
+		proxy.ProxyId = NullProxy
 	}
 }
 

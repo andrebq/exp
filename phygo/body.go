@@ -13,6 +13,9 @@ const (
 )
 
 type Body struct {
+	world   *World
+	next    *Body
+	prev    *Body
 	Fixture *Fixture
 	id      Id
 	Flags   BodyFlag
@@ -42,13 +45,13 @@ func (b *Body) String() string {
 	return fmt.Sprintf("body[%v]", b.id)
 }
 
-func BodyFromDef(bd *BodyDef, ret *Body) {
+func BodyFromDef(bd *BodyDef, ret *Body, w *World) {
+	ret.world = w
 	ret.Xf = NewTransformFromPosAngle(bd.Position, bd.Angle)
 	ret.Xf0 = NewTransform()
 	ret.LinearVelocity = bd.LinearVelocity
 	ret.AngularVelocity = bd.AngularVelocity
 	ret.Type = bd.Type
-	ret.fixtureList = make(fixtureList, 0, 1)
 
 	ret.Flags |= AutoSleepFlag
 
@@ -65,6 +68,7 @@ func BodyFromDef(bd *BodyDef, ret *Body) {
 }
 
 func (b *Body) CreateFixture(fd *FixtureDef, world *World) *Fixture {
+	ret := &Fixture{}
 	FixtureFromDef(fd, ret)
 
 	if (b.Flags & ActiveFlag) == ActiveFlag {

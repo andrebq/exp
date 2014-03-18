@@ -11,31 +11,15 @@ const (
 )
 
 type World struct {
+	rootBody       *Body
 	nextBodyId     Id
-	bodyList       bodyList
 	ContactManager *ContactManager
 	Flags          WorldFlag
-}
-
-type bodyList []Body
-
-func (bl *bodyList) alloc() *Body {
-	slice := *bl
-	if len(slice) == cap(slice) {
-		// reached max cap
-		tmp := make([]Body, len(slice), len(slice)*2+1)
-		copy(tmp, slice)
-		slice = tmp
-		*bl = slice
-	}
-	slice = slice[:len(slice)+1]
-	return &slice[len(slice)-1]
 }
 
 func NewWorld() *World {
 	return &World{
 		nextBodyId: 1,
-		bodyList:   make(bodyList, 0),
 		ContactManager: &ContactManager{
 			BroadPhase: &BroadPhase{},
 		},
@@ -43,11 +27,18 @@ func NewWorld() *World {
 }
 
 func (w *World) CreateBody(bd *BodyDef) *Body {
-	ret := w.bodyList.alloc()
-	BodyFromDef(bd, ret)
-	ret.id = w.nextBodyId
+	body := &Body{}
+	BodyFromDef(bd, body, w)
+	if w.rootBody == nil {
+		w.rootBody = body
+	} else {
+		body.next = w.rootBody
+		w.rootBody.prev = body
+		w.rootBody = body
+	}
+	body.id = w.nextBodyId
 	w.nextBodyId++
-	return ret
+	return body
 }
 
 func (w *World) CreateJoint(jd *FrictionJointDef) *Joint {
