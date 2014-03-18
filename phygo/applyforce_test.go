@@ -26,19 +26,31 @@ func TestApplyForce(t *testing.T) {
 
 	// left shape
 	shape.Set(glm.Vector2{-20, -20}, glm.Vector2{-20, 20})
-	ground.CreateFixture(fixtureDef)
+	if ground.CreateFixture(&fixtureDef, world) == nil {
+		t.Fatalf("unable to create fixture for body: %v with def: %v",
+			ground, fixtureDef)
+	}
 
 	// right shape
 	shape.Set(glm.Vector2{20, -20}, glm.Vector2{20, 20})
-	ground.CreateFixture(fixtureDef)
+	if ground.CreateFixture(&fixtureDef, world) == nil {
+		t.Fatalf("unable to create fixture for body: %v with def: %v",
+			ground, fixtureDef)
+	}
 
 	// top
 	shape.Set(glm.Vector2{-20, 20}, glm.Vector2{20, 20})
-	ground.CreateFixture(fixtureDef)
+	if ground.CreateFixture(&fixtureDef, world) == nil {
+		t.Fatalf("unable to create fixture for body: %v with def: %v",
+			ground, fixtureDef)
+	}
 
 	// bottom
 	shape.Set(glm.Vector2{-20, -20}, glm.Vector2{20, -20})
-	ground.CreateFixture(fixtureDef)
+	if ground.CreateFixture(&fixtureDef, world) == nil {
+		t.Fatalf("unable to create fixture for body: %v with def: %v",
+			ground, fixtureDef)
+	}
 
 	xf1 := NewTransform()
 	xf1.Q = RotationFromAngle(0.3524 * glm.Pi)
@@ -83,8 +95,8 @@ func TestApplyForce(t *testing.T) {
 	if m_body == nil {
 		t.Fatalf("unable to create body with def: %v", bd)
 	}
-	m_body.CreateFixture(sd1)
-	m_body.CreateFixture(sd2)
+	m_body.CreateFixture(&sd1, world)
+	m_body.CreateFixture(&sd2, world)
 
 	shape = NewPolygonShape()
 	shape.SetAsBox(glm.Vector2{0.5, 0.5})
@@ -100,7 +112,7 @@ func TestApplyForce(t *testing.T) {
 		bd.Position = glm.Vector2{0, 5.0 + 1.54*float32(i)}
 
 		body := world.CreateBody(&bd)
-		body.CreateFixture(fd)
+		body.CreateFixture(&fd, world)
 
 		gravity := float32(10.0)
 		inertia := body.Inertia()

@@ -9,11 +9,13 @@ type BodyFlag uint
 
 const (
 	AutoSleepFlag = BodyFlag(0x0004)
+	ActiveFlag    = BodyFlag(0x0020)
 )
 
 type Body struct {
-	id    Id
-	Flags BodyFlag
+	Fixture *Fixture
+	id      Id
+	Flags   BodyFlag
 	// body origin transform
 	Xf Transform
 	// previous transform for particle simulation
@@ -24,7 +26,6 @@ type Body struct {
 	AngularVelocity float32
 	Force           glm.Vector2
 	Torque          float32
-	Fixture         []Fixture
 	SleepTime       float32
 
 	LinearDamping  float32
@@ -41,14 +42,13 @@ func (b *Body) String() string {
 	return fmt.Sprintf("body[%v]", b.id)
 }
 
-func NewBody(bd *BodyDef) Body {
-	ret := Body{
-		Xf:              NewTransformFromPosAngle(bd.Position, bd.Angle),
-		Xf0:             NewTransform(),
-		LinearVelocity:  bd.LinearVelocity,
-		AngularVelocity: bd.AngularVelocity,
-		Type:            bd.Type,
-	}
+func BodyFromDef(bd *BodyDef, ret *Body) {
+	ret.Xf = NewTransformFromPosAngle(bd.Position, bd.Angle)
+	ret.Xf0 = NewTransform()
+	ret.LinearVelocity = bd.LinearVelocity
+	ret.AngularVelocity = bd.AngularVelocity
+	ret.Type = bd.Type
+	ret.fixtureList = make(fixtureList, 0, 1)
 
 	ret.Flags |= AutoSleepFlag
 
@@ -61,12 +61,25 @@ func NewBody(bd *BodyDef) Body {
 	}
 	ret.inertia = 0
 	ret.invInertia = 0
-	ret.Fixture = make([]Fixture, 0, 1)
+	ret.Fixture = nil
+}
+
+func (b *Body) CreateFixture(fd *FixtureDef, world *World) *Fixture {
+	FixtureFromDef(fd, ret)
+
+	if (b.Flags & ActiveFlag) == ActiveFlag {
+		broadPhase := world.ContactManager.BroadPhase
+		ret.CreateProxies(broadPhase, &b.Xf)
+	}
+	if ret.Density > 0.0 {
+		b.ResetMassData()
+	}
+	world.Flags |= NewFixtureFlag
 	return ret
 }
 
-func (b *Body) CreateFixture(fd FixtureDef) *Fixture {
-	return nil
+func (b *Body) ResetMassData() {
+	panic("TODO implement this later. I am too lazy to do it now")
 }
 
 func (b *Body) Inertia() float32 {
