@@ -6,8 +6,7 @@ import (
 )
 
 func TestShapeSetAs(t *testing.T) {
-	shape := &Shape{}
-	shape.SetAsRect(glm.Vector2{1, 1})
+	shape := NewRectShape(glm.Vector2{1, 1})
 
 	expected := []glm.Vector2{
 		glm.Vector2{-1, 1},
@@ -16,11 +15,13 @@ func TestShapeSetAs(t *testing.T) {
 		glm.Vector2{-1, -1},
 	}
 
-	if len(expected) != len(shape.Vertex) {
+	actual := FloatToVec(nil, shape.Vertices()...)
+
+	if len(expected) != len(actual) {
 		t.Errorf("Length should be %v but it is %v", len(expected),
-			len(shape.Vertex))
+			len(actual))
 	} else {
-		for i, v := range shape.Vertex {
+		for i, v := range actual {
 			if expected[i] != v {
 				t.Errorf("Vertex at [%v] should be %v but got %v",
 					i, expected[i], v)

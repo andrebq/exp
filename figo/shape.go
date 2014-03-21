@@ -5,12 +5,10 @@ import (
 )
 
 type Shape struct {
-	Vertex []glm.Vector2
+	*glm.Polygon
 }
 
-// SetAsRect update the Shape vertex info,
-// and make it a box centered at (0,0)
-//
+// NewRectShape create a new Shape and
 // In this function you should provide half of the
 // final size, if you give (1,1) you get a box of
 // (2,2).
@@ -18,26 +16,19 @@ type Shape struct {
 // X and Y don't need to be equal
 //
 // Vertex information is set clockwise.
-func (s *Shape) SetAsRect(halfSize glm.Vector2) {
-	s.expandVertexToFit(4)
-	s.Vertex[0] = glm.Vector2{-halfSize.X, halfSize.Y}
-	s.Vertex[1] = glm.Vector2{halfSize.X, halfSize.Y}
-	s.Vertex[2] = glm.Vector2{halfSize.X, -halfSize.Y}
-	s.Vertex[3] = glm.Vector2{-halfSize.X, -halfSize.Y}
+func NewRectShape(halfSize glm.Vector2) Shape {
+	var points [8]float32
+	points[0], points[1] = -halfSize.X, halfSize.Y
+	points[2], points[3] = halfSize.X, halfSize.Y
+	points[4], points[5] = halfSize.X, -halfSize.Y
+	points[6], points[7] = -halfSize.X, -halfSize.Y
+	s, _ := glm.NewPolygon(points[:])
+	return Shape{s}
 }
 
 // SetAsPolygon will copy all vertices from points
 // to this shape.
-func (s *Shape) SetAsPolygon(points ...glm.Vector2) {
-	s.expandVertexToFit(len(points))
-	copy(s.Vertex, points)
-}
-
-// expand the vertex attribute, no data is zeroed
-func (s *Shape) expandVertexToFit(newSize int) {
-	if cap(s.Vertex) >= newSize {
-		s.Vertex = s.Vertex[:newSize]
-	} else {
-		s.Vertex = make([]glm.Vector2, newSize)
-	}
+func SetAsPolygon(points ...glm.Vector2) Shape {
+	s, _ := glm.NewPolygon(VecToFloat(nil, points...))
+	return Shape{s}
 }
