@@ -8,6 +8,7 @@ import (
 
 type Shape struct {
 	*glm.Polygon
+	body *Body
 }
 
 // NewRectShape create a new Shape and
@@ -35,7 +36,7 @@ func NewPolygonShape(points ...glm.Vector2) *Shape {
 
 func polygonShapeFromFloatSlice(points ...float32) *Shape {
 	s, _ := glm.NewPolygon(points)
-	return &Shape{s}
+	return &Shape{s, nil}
 }
 
 func (s *Shape) Clone() *Shape {
