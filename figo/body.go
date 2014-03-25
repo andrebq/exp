@@ -1,16 +1,12 @@
 package figo
 
-import (
-	glm "github.com/Agon/googlmath"
-)
-
 // Body is a collection of shapes that have their
 // vertices kept in a solid formation
 //
 // Ie, Body is a RigidBody
 type Body struct {
 	shapes      []*Shape
-	boundRect   glm.Rectangle
+	boundRect   AABB
 	invalidRect bool
 }
 
@@ -39,7 +35,7 @@ func (b *Body) AddShape(s *Shape) *Body {
 //
 // The returned rectanble is large enough to hold all
 // shapes that form this body
-func (b *Body) BoundRect() glm.Rectangle {
+func (b *Body) BoundRect() AABB {
 	if b.invalidRect {
 		b.recalculateBoundRect()
 	}
@@ -55,6 +51,7 @@ func (b *Body) recalculateBoundRect() {
 		return
 	}
 	for _, s := range b.shapes {
-		b.boundRect.Merge(s.BoundingRectangle())
+		aabb := s.AABB()
+		b.boundRect.MergeWith(&aabb)
 	}
 }

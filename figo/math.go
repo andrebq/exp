@@ -42,3 +42,21 @@ func FloatToVec(out []glm.Vector2, in ...float32) []glm.Vector2 {
 	}
 	return out
 }
+
+// MinMaxVec will return a pair of vectors hold the smallest (x,y)
+// pair from a and b. And the biggest (x,y) pair from a and b.
+//
+// TODO: put a example here
+//
+// min, max := MinMaxVec(glm.Vector2{-1, 10}, glm.Vector2{10, -1})
+//
+// min == glm.Vector2{-1, -1}
+// max == glm.Vector2{10, 10}
+func MinMaxVec(a, b glm.Vector2) (min glm.Vector2, max glm.Vector2) {
+	min.X = glm.Min(a.X, b.X)
+	min.Y = glm.Min(a.Y, b.Y)
+
+	max.X = glm.Max(a.X, b.X)
+	max.Y = glm.Max(a.Y, b.Y)
+	return
+}

@@ -7,8 +7,8 @@ import (
 )
 
 type Shape struct {
-	*glm.Polygon
 	body *Body
+	poly glm.Polygon
 }
 
 // NewRectShape create a new Shape and
@@ -36,7 +36,7 @@ func NewPolygonShape(points ...glm.Vector2) *Shape {
 
 func polygonShapeFromFloatSlice(points ...float32) *Shape {
 	s, _ := glm.NewPolygon(points)
-	return &Shape{s, nil}
+	return &Shape{poly: *s, body: nil}
 }
 
 func (s *Shape) Clone() *Shape {
@@ -50,7 +50,66 @@ func (s *Shape) applyChangesTo(ret *Shape) {
 	ret.SetOrigin(s.Origin())
 	ret.SetPosition(s.Position())
 	ret.SetRotation(s.Rotation())
-	ret.SetScale(s.Scalar())
+	ret.SetScale(s.Scale())
+}
+
+func (s *Shape) SetOrigin(origin glm.Vector2) {
+	s.poly.SetOrigin(origin)
+}
+
+func (s *Shape) Origin() glm.Vector2 {
+	return s.poly.Origin()
+}
+
+func (s *Shape) SetPosition(pos glm.Vector2) {
+	s.poly.SetPosition(pos)
+	s.invalidateBody()
+}
+
+func (s *Shape) Position() glm.Vector2 {
+	return s.poly.Position()
+}
+
+func (s *Shape) SetRotation(rot float32) {
+	s.poly.SetRotation(rot)
+	s.invalidateBody()
+}
+
+func (s *Shape) Rotation() float32 {
+	return s.poly.Rotation()
+}
+
+func (s *Shape) SetScale(scale glm.Vector2) {
+	s.poly.SetScale(scale)
+	s.invalidateBody()
+}
+
+func (s *Shape) Scale() glm.Vector2 {
+	return s.poly.Scalar()
+}
+
+func (s *Shape) Vertices() []float32 {
+	return s.poly.Vertices()
+}
+
+func (s *Shape) TransformedVertices() []float32 {
+	return s.poly.TransformedVertices()
+}
+
+func (s *Shape) AABB() AABB {
+	r := s.poly.BoundingRectangle()
+	return NewAABB(r.X, r.Y, r.Width, r.Height)
+}
+
+func (s *Shape) Translate(transf glm.Vector2) {
+	s.poly.Translate(transf)
+	s.invalidateBody()
+}
+
+func (s *Shape) invalidateBody() {
+	if s.body != nil {
+		s.body.invalidRect = true
+	}
 }
 
 func (s *Shape) String() string {
