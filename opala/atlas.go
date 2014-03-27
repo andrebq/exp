@@ -1,8 +1,17 @@
 package opala
 
 import (
+	"fmt"
+	glm "github.com/Agon/googlmath"
 	"image"
 )
+
+// UVRect represent the coordinate system for
+// used by OpenGL
+type UVRect struct {
+	BottomLeft glm.Vector2
+	TopRight   glm.Vector2
+}
 
 // Atlas holds a large texture in memory and enable users
 // to ask for chunks of the image.
@@ -32,6 +41,28 @@ func NewAtlas(width, height, nRows, nColumns int) *Atlas {
 	}
 }
 
+// AllocateMany will try to allocate at most count chunks
+// and return the slice with allocated chunks.
+//
+// If an error happens the slice will hold the chunks that
+// could be allocated before the error.
+//
+// Chunks are named by concatenating prefix + "-" + index
+func (a *Atlas) AllocateMany(prefix string, count int) ([]*AtlasChunk, error) {
+	if count < 0 {
+		return nil, CountMustBePositive
+	}
+	ret := make([]*AtlasChunk, 0, count)
+	for i := 0; i < count; i++ {
+		c, err := a.AllocateDefault(fmt.Sprintf("%v-%v", prefix, i))
+		if err != nil {
+			return ret, err
+		}
+		ret = append(ret, c)
+	}
+	return ret, nil
+}
+
 func (a *Atlas) AllocateDefault(name string) (*AtlasChunk, error) {
 	if v := a.findByName(name); v != nil {
 		return v, nil
@@ -42,8 +73,38 @@ func (a *Atlas) AllocateDefault(name string) (*AtlasChunk, error) {
 	}
 	ci.name = name
 	ci.subdata = a.subImage(ci)
+	ci.uvrect = a.calculateUvFor(ci)
 	a.chunks = append(a.chunks, ci)
 	return ci, nil
+}
+
+// ChunkAt returns the chunk at the given row and column
+// if no chunk is found, returns nil
+func (a *Atlas) ChunkAt(row, column int) *AtlasChunk {
+	for _, v := range a.chunks {
+		if v.row == row && v.column == column {
+			return v
+		}
+	}
+	return nil
+}
+
+func (a *Atlas) calculateUvFor(c *AtlasChunk) UVRect {
+	rows, cols := a.gridSize()
+	imgWidth, imgHeight := float32(cols*a.cw), float32(rows*a.ch)
+	// since in opengl the 0,0 means the bottomleft and
+	// image.RGBA 0,0 means topleft
+	// we need to offset cY by the heigth of each chunk
+	cX, cY := float32(c.column*a.cw), float32(c.row*a.ch+a.ch)
+	uvr := UVRect{
+		BottomLeft: glm.Vector2{
+			X: cX / imgWidth,
+			Y: 1 - cY/imgHeight,
+		},
+	}
+	uvr.TopRight.X = uvr.BottomLeft.X + float32(a.cw)/imgWidth
+	uvr.TopRight.Y = uvr.BottomLeft.Y + float32(a.ch)/imgHeight
+	return uvr
 }
 
 func (a *Atlas) subImage(c *AtlasChunk) *image.RGBA {
@@ -106,9 +167,23 @@ type AtlasChunk struct {
 	subdata     *image.RGBA
 	name        string
 	row, column int
+	uvrect      UVRect
 }
 
 func (ic *AtlasChunk) Size() (w, h int) {
 	rect := ic.subdata.Bounds()
 	return rect.Dx(), rect.Dy()
+}
+
+func (ic *AtlasChunk) UVRect() UVRect {
+	return ic.uvrect
+}
+
+func (ic *AtlasChunk) String() string {
+	return fmt.Sprintf("%v [%v,%v] uv[%v,%v]",
+		ic.name,
+		ic.row,
+		ic.column,
+		ic.uvrect.BottomLeft,
+		ic.uvrect.TopRight)
 }

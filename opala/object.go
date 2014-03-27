@@ -2,27 +2,16 @@ package opala
 
 import (
 	glm "github.com/Agon/googlmath"
-	"github.com/go-gl/gl"
-	"image"
 	"image/color"
 )
 
-// Texture represents the image that should be rendered
-// at a given location.
-//
-// Textures are applied to a object and combined with a tint
-// to give the final output
-type Texture struct {
-	Image *image.RGBA
-	UV    glm.Vector2
-
-	glTextureId gl.Texture
-}
-
 // Object is a object that can be renderd at a give location
 type Object struct {
-	// The texture to apply for this object
-	Texture *Texture
+	// The piece of the atlas that should
+	// be used to render this object
+	Atlas *AtlasChunk
+	// model matrix for vertex shader
+	modelMatrix *glm.Matrix4
 	// A color to paint over the texture
 	Tint color.Color
 
@@ -33,8 +22,9 @@ type Object struct {
 	// The rotation in degrees for this object
 	rotationDeg float32
 
-	// model matrix for vertex shader
-	modelMatrix *glm.Matrix4
 	// indicates that the object matrix must be updated
 	dirty bool
+}
+
+func (o *Object) render(dt float32) {
 }
