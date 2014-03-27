@@ -98,6 +98,7 @@ func NewDisplay(width, height int, title string) (*Display, error) {
 
 func (d *Display) Close() {
 	// see if we need to do anything else here....
+	d.window.Destroy()
 	d.window = nil
 	useGlfwStats(func(s *glfwStats) {
 		s.winCount--
@@ -128,7 +129,7 @@ func (d *Display) Render() {
 // channels but instead should be checked each frame.
 //
 // This function should be called at least one time each frame.
-func (d *Display) AcquireInput() {
+func AcquireInput() {
 	glfw.PollEvents()
 }
 
@@ -137,6 +138,75 @@ func (d *Display) AcquireInput() {
 // of the user pressing the close button.
 func (d *Display) ShouldClose() bool {
 	return d.window.ShouldClose()
+}
+
+type DisplayList []*Display
+
+func NewDisplayList() *DisplayList {
+	dl := make(DisplayList, 0)
+	return &dl
+}
+
+func (dl *DisplayList) Push(d ...*Display) {
+	for _, nd := range d {
+		*dl = append(*dl, nd)
+	}
+}
+
+func (dl *DisplayList) Remove(d *Display) {
+	slice := *dl
+	removedIdx := int(-1)
+	for i, v := range slice {
+		if v == d {
+			slice[i] = nil
+			removedIdx = i
+		}
+	}
+	if removedIdx >= 0 {
+		dl.shrinkAt(removedIdx)
+	}
+}
+
+// ShouldClose returns true when every window
+// on this display is should be closed.
+//
+// Windows marked to be closed are removed from
+// this list
+func (dl *DisplayList) ShouldClose() bool {
+	// worst case, everybody want's to
+	// close
+	toRemove := make([]*Display, 0, len(*dl))
+	for _, v := range *dl {
+		if v.ShouldClose() {
+			toRemove = append(toRemove, v)
+			v.Close()
+		}
+	}
+	for _, v := range toRemove {
+		dl.Remove(v)
+	}
+	return len(*dl) == 0
+}
+
+func (dl *DisplayList) Render() {
+	for _, d := range *dl {
+		d.Render()
+	}
+}
+
+func (dl *DisplayList) shrinkAt(idx int) {
+	slice := *dl
+	slice[idx] = nil
+	for i := idx; i < len(slice)-1; i++ {
+		slice[i] = slice[i+1]
+	}
+	slice = slice[:len(slice)-1]
+	*dl = slice
+	if len(slice) == 0 {
+		// release the space from
+		// the backing array
+		*dl = make([]*Display, 0)
+	}
 }
 
 func useGlfwStats(fn func(s *glfwStats)) {

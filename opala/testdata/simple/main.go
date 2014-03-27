@@ -9,9 +9,16 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	other, err := opala.NewDisplay(800, 600, "other")
+	if err != nil {
+		panic(err)
+	}
+	dl := opala.NewDisplayList()
+	dl.Push(w, other)
 	opala.Vsync(true)
-	for !w.ShouldClose() {
-		w.AcquireInput()
-		w.Render()
+	for !dl.ShouldClose() {
+		opala.AcquireInput()
+		dl.Render()
 	}
 }
