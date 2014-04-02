@@ -1,0 +1,36 @@
+{{ define "full" }}
+<!doctype html>
+<html class="gocm-container">
+	<head>
+		<title>CodeMirror - {{.editorid}}</title>
+		{{ template "editorcss" . }}
+	</head>
+	<body class="gocm-container">
+		{{ template "editorscript" . }}
+		{{ template "editordiv" . }}
+	</body>
+</html>
+{{ end }}
+
+
+{{ define "partial" }}
+{{ template "editordiv" . }}
+{{ end }}
+
+{{ define "editordiv" }}
+<div id="{{.editorid}}" class="gocm-editor gocm-container">
+</div>
+<script>CodeMirror(document.getElementById("{{.editorid}}")); GoCM.autosize();</script>
+{{ end }}
+
+{{ define "editorcss" }}
+{{ range .libcss}}
+<link href="{{.}}" type="text/css" rel="stylesheet">
+{{ end }}
+{{ end }}
+
+{{ define "editorscript" }}
+{{ range .libscript }}
+<script src="{{.}}"/></script>
+{{ end }}
+{{ end }}
