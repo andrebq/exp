@@ -3,105 +3,109 @@ package odb
 import (
 	"bytes"
 	"github.com/cznic/kv"
-	"encoding/gob"
-	"io"
 	"os"
 )
 
-var (
-	oidKey = []byte("oid")
-)
-
 type DBEntry struct {
-	object *Object
+	*Object
 	data []byte
 }
 
-func (dbe *DBEntry) UpdateData() error {
+func (dbe *DBEntry) InvalidateData() []byte {
+	ret := dbe.data
+	dbe.data = nil
+	return ret
+}
+
+func (dbe *DBEntry) UpdateData() ([]byte, error) {
+	if dbe.data != nil {
+		return dbe.data, nil
+	}
+
 	buf := &bytes.Buffer{}
-	enc := gob.NewEncoder(buf)
-	err := enc.Encode(dbe.object.data)
+	bw := &BinaryWriter{buf, nil}
+	err := bw.WriteTypedMap(&dbe.TypedMap)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	dbe.data = buf.Bytes()
-	return nil
+	return dbe.data, nil
 }
 
 type Index interface {
 	Name() string
-	KeySize(o *DBEntry) int
-	ValueSize(o *DBEntry) int
-	Find(key interface{}) (*DBEntry, error)
-	WriteKey(out io.Writer, o *DBEntry) (int, error)
-	WriteValue(out io.Writer, o *DBEntry) (int, error)
+	Find(values ...interface{}) (*DBEntry, error)
+	Write(dbe *DBEntry) error
 	ExplainError(err error, writingKey bool) error
 }
 
 type DB struct {
-	db *kv.DB
+	db      *kv.DB
 	indexes []Index
 }
 
 func (db *DB) PutObject(o *Object) (*Object, error) {
-	dbe := &DBEntry{object: o}
-	if o.Id() == 0 {
-		nid, err := db.incOid()
-		if err != nil { return nil, err }
-		o.SetId(nid)
-	}
+	dbe := &DBEntry{Object: o, data: nil}
 	err := db.writeToIndexes(dbe)
 	return o, err
 }
 
-func (db *DB) incOid() (int64, error) {
-	nid, err := db.db.Inc(oidKey, 1)
-	return nid, err
+func (db *DB) FindByOID(vals ...interface{}) (*Object, error) {
+	return db.FindOneByIndex("core_oid", vals...)
+}
+
+func (db *DB) FindOneByIndex(idxName string, vals ...interface{}) (*Object, error) {
+	for _, v := range db.indexes {
+		if v.Name() == idxName {
+			dbe, err := v.Find(vals...)
+			return dbe.Object, err
+		}
+	}
+	return nil, errNoIndexProvided
 }
 
 func (db *DB) writeToIndexes(dbe *DBEntry) error {
+	var err error
 	for _, v := range db.indexes {
-		keySize := v.KeySize(dbe)
-		valueSize := v.ValueSize(dbe)
-		if keySize <= 0 || valueSize <= 0 {
-			continue
-		}
-		buf := &bytes.Buffer{}
-		buf.Grow(keySize + valueSize)
-		buf.Reset()
-		_, err := v.WriteKey(buf, dbe)
-		if err != nil {
-			return v.ExplainError(err, true)
-		}
-		_, err = v.WriteValue(buf, dbe)
+		err = v.Write(dbe)
 		if err != nil {
 			return v.ExplainError(err, false)
-		}
-		data := buf.Bytes()
-
-		err = db.db.Set(data[:keySize], data[keySize:])
-		if err != nil {
-			return err
 		}
 	}
 	return nil
 }
 
-func NewDb(filename string) (*DB, error) {
+func NewDB(filename string) (*DB, error) {
 	kvdb, err := openOrCreate(filename)
 	if err != nil {
 		return nil, err
 	}
-	return &DB{
-		db: kvdb,
-	}, nil
+	db := &DB{
+		db:      kvdb,
+		indexes: make([]Index, 0),
+	}
+	db.AddIndex(&OidIndex{kvdb})
+	return db, nil
 }
 
-func openOrCreate(dbfile string) (*kv.DB, error){
+func (db *DB) AddIndex(idx Index) {
+	db.indexes = append(db.indexes, idx)
+}
+
+func openOrCreate(dbfile string) (*kv.DB, error) {
+	opt := &kv.Options{VerifyDbBeforeOpen: true,
+		VerifyDbAfterOpen:   true,
+		VerifyDbBeforeClose: true,
+		VerifyDbAfterClose:  true}
+
+	if len(dbfile) == 0 {
+		// in memory database
+		return kv.CreateMem(opt)
+	}
 	_, err := os.Stat(dbfile)
 	if os.IsNotExist(err) {
-		return kv.Create(dbfile, nil)
+		return kv.Create(dbfile, opt)
 	} else {
-		return kv.Open(dbfile, nil)
+		return kv.Open(dbfile, opt)
 	}
 }

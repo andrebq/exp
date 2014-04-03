@@ -1,11 +1,9 @@
 package odb
 
-type TypedMap struct {
-	data map[string]interface{}
-}
+type TypedMap map[string]interface{}
 
 func (t *TypedMap) get(name string) interface{} {
-	val := t.data[name]
+	val := (*t)[name]
 	if val == nil {
 		return struct{}{}
 	}
@@ -14,15 +12,15 @@ func (t *TypedMap) get(name string) interface{} {
 
 func (t *TypedMap) Put(name string, val interface{}) bool {
 	switch val.(type) {
-	case string, uint64, uint32, int32:
-		t.data[name] = val
+	case string, int64, int32:
+		(*t)[name] = val
 		return true
 	}
 	return false
 }
 
 func (t *TypedMap) Has(name string) bool {
-	_, ok := t.data[name]
+	_, ok := (*t)[name]
 	return ok
 }
 
@@ -59,11 +57,11 @@ func (o *Object) SetId(id int64) {
 	o.Put("core_id", id)
 }
 
-func (o *Object) SetDb(db int32) {
+func (o *Object) SetDB(db int32) {
 	o.Put("core_db", db)
 }
 
-func (o *Object) Db() int32 {
+func (o *Object) DB() int32 {
 	return o.Int32("core_db")
 }
 
@@ -73,4 +71,8 @@ func (o *Object) Id() int64 {
 
 func (o *Object) Version() int32 {
 	return o.Int32("core_version")
+}
+
+func NewObject() *Object {
+	return &Object{make(TypedMap)}
 }
