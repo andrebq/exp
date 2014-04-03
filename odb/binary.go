@@ -6,31 +6,31 @@ import (
 	"io"
 )
 
-type BinaryWriter struct {
+type BinaryBuffer struct {
 	io.Writer
 	io.Reader
 }
 
-func (bw *BinaryWriter) SwitchToReader(reader io.Reader) {
+func (bw *BinaryBuffer) SwitchToReader(reader io.Reader) {
 	bw.Reader = reader
 	bw.Writer = nil
 }
 
-func (bw *BinaryWriter) SwitchToWriter(writer io.Writer) {
+func (bw *BinaryBuffer) SwitchToWriter(writer io.Writer) {
 	bw.Reader = nil
 	bw.Writer = writer
 }
 
-func (bw *BinaryWriter) WriteValue(val interface{}) (int, error) {
+func (bw *BinaryBuffer) WriteValue(val interface{}) (int, error) {
 	return -1, nil
 }
-func (bw *BinaryWriter) WriteInt32(val int32) error {
+func (bw *BinaryBuffer) WriteInt32(val int32) error {
 	return binary.Write(bw, binary.BigEndian, val)
 }
-func (bw *BinaryWriter) WriteInt64(val int64) error {
+func (bw *BinaryBuffer) WriteInt64(val int64) error {
 	return binary.Write(bw, binary.BigEndian, val)
 }
-func (bw *BinaryWriter) WriteString(val string) (int, error) {
+func (bw *BinaryBuffer) WriteString(val string) (int, error) {
 	buf := []byte(val)
 	err := bw.WriteInt32(int32(len(buf)))
 	if err != nil {
@@ -38,24 +38,24 @@ func (bw *BinaryWriter) WriteString(val string) (int, error) {
 	}
 	return bw.Write(buf)
 }
-func (bw *BinaryWriter) WriteTypedMap(obj *TypedMap) error {
+func (bw *BinaryBuffer) WriteTypedMap(obj *TypedMap) error {
 	enc := gob.NewEncoder(bw)
 	return enc.Encode(obj)
 }
 
-func (bw *BinaryWriter) ReadInt32() (int32, error) {
+func (bw *BinaryBuffer) ReadInt32() (int32, error) {
 	var out int32
 	err := binary.Read(bw, binary.BigEndian, &out)
 	return out, err
 }
 
-func (bw *BinaryWriter) ReadInt64() (int64, error) {
+func (bw *BinaryBuffer) ReadInt64() (int64, error) {
 	var out int64
 	err := binary.Read(bw, binary.BigEndian, &out)
 	return out, err
 }
 
-func (bw *BinaryWriter) ReadString() (string, error) {
+func (bw *BinaryBuffer) ReadString() (string, error) {
 	sz, err := bw.ReadInt32()
 	if err != nil {
 		return "", err
@@ -68,7 +68,7 @@ func (bw *BinaryWriter) ReadString() (string, error) {
 	return string(buf), nil
 }
 
-func (bw *BinaryWriter) ReadTypedMap(out *TypedMap) error {
+func (bw *BinaryBuffer) ReadTypedMap(out *TypedMap) error {
 	dec := gob.NewDecoder(bw)
 	err := dec.Decode(out)
 	return err

@@ -23,7 +23,7 @@ func (dbe *DBEntry) UpdateData() ([]byte, error) {
 	}
 
 	buf := &bytes.Buffer{}
-	bw := &BinaryWriter{buf, nil}
+	bw := &BinaryBuffer{buf, nil}
 	err := bw.WriteTypedMap(&dbe.TypedMap)
 	if err != nil {
 		return nil, err

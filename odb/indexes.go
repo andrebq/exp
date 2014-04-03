@@ -30,7 +30,7 @@ func (o *OidIndex) Write(dbe *DBEntry) error {
 	dbe.SetId(nid)
 	buf := &bytes.Buffer{}
 	buf.Grow(8)
-	bw := &BinaryWriter{buf, nil}
+	bw := &BinaryBuffer{buf, nil}
 	bw.WriteInt64(dbe.Id())
 	bw.WriteTypedMap(&dbe.TypedMap)
 	bin := buf.Bytes()
@@ -43,7 +43,7 @@ func (o *OidIndex) ExplainError(err error, isKey bool) error {
 
 func (o *OidIndex) Find(values ...interface{}) (*DBEntry, error) {
 	buf := &bytes.Buffer{}
-	bw := BinaryWriter{buf, nil}
+	bw := BinaryBuffer{buf, nil}
 	if len(values) != 1 {
 		return nil, errInvalidIndexFind
 	}
