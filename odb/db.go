@@ -21,10 +21,9 @@ func (dbe *DBEntry) UpdateData() ([]byte, error) {
 	if dbe.data != nil {
 		return dbe.data, nil
 	}
-
 	buf := &bytes.Buffer{}
 	bw := &BinaryBuffer{buf, nil}
-	err := bw.WriteTypedMap(&dbe.TypedMap)
+	_, err := bw.WriteTypedMap(&dbe.TypedMap)
 	if err != nil {
 		return nil, err
 	}
@@ -42,10 +41,17 @@ type Index interface {
 type DB struct {
 	db      *kv.DB
 	indexes []Index
+	dbid    int32
 }
 
 func (db *DB) PutObject(o *Object) (*Object, error) {
 	dbe := &DBEntry{Object: o, data: nil}
+	if o.DB() == 0 {
+		o.SetDB(db.dbid)
+	}
+	if o.DB() != db.dbid {
+		return nil, errObjectFromOtherDB
+	}
 	err := db.writeToIndexes(dbe)
 	return o, err
 }
@@ -75,7 +81,7 @@ func (db *DB) writeToIndexes(dbe *DBEntry) error {
 	return nil
 }
 
-func NewDB(filename string) (*DB, error) {
+func NewDB(filename string, dbid int32) (*DB, error) {
 	kvdb, err := openOrCreate(filename)
 	if err != nil {
 		return nil, err
@@ -83,6 +89,7 @@ func NewDB(filename string) (*DB, error) {
 	db := &DB{
 		db:      kvdb,
 		indexes: make([]Index, 0),
+		dbid:    dbid,
 	}
 	db.AddIndex(&OidIndex{kvdb})
 	return db, nil

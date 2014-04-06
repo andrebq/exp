@@ -23,15 +23,17 @@ func (o *OidIndex) incOid() (int64, error) {
 }
 
 func (o *OidIndex) Write(dbe *DBEntry) error {
-	nid, err := o.incOid()
-	if err != nil {
-		return err
+	if dbe.LocalId() == 0 {
+		nid, err := o.incOid()
+		if err != nil {
+			return err
+		}
+		dbe.SetLocalId(nid)
 	}
-	dbe.SetId(nid)
 	buf := &bytes.Buffer{}
 	buf.Grow(8)
 	bw := &BinaryBuffer{buf, nil}
-	bw.WriteInt64(dbe.Id())
+	bw.WriteInt64(dbe.Oid())
 	bw.WriteTypedMap(&dbe.TypedMap)
 	bin := buf.Bytes()
 	return o.Set(bin[:8], bin[8:])

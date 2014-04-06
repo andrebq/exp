@@ -1,6 +1,7 @@
 package odb
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/gob"
 	"io"
@@ -21,8 +22,33 @@ func (bw *BinaryBuffer) SwitchToWriter(writer io.Writer) {
 	bw.Writer = writer
 }
 
-func (bw *BinaryBuffer) WriteValue(val interface{}) (int, error) {
-	return -1, nil
+func (bw *BinaryBuffer) WriteValues(values ...interface{}) (int, error) {
+	count := int(0)
+	var err error
+	for _, v := range values {
+		switch v := v.(type) {
+		case int32:
+			count += 4
+			err = bw.WriteInt32(v)
+		case int64:
+			count += 8
+			err = bw.WriteInt64(v)
+		case string:
+			var sz int
+			sz, err = bw.WriteString(v)
+			count += sz
+		case *TypedMap:
+			var sz int
+			sz, err = bw.WriteTypedMap(v)
+			count += sz
+		default:
+			err = errInvalidType
+		}
+		if err != nil {
+			return count, err
+		}
+	}
+	return count, nil
 }
 func (bw *BinaryBuffer) WriteInt32(val int32) error {
 	return binary.Write(bw, binary.BigEndian, val)
@@ -38,9 +64,14 @@ func (bw *BinaryBuffer) WriteString(val string) (int, error) {
 	}
 	return bw.Write(buf)
 }
-func (bw *BinaryBuffer) WriteTypedMap(obj *TypedMap) error {
-	enc := gob.NewEncoder(bw)
-	return enc.Encode(obj)
+func (bw *BinaryBuffer) WriteTypedMap(obj *TypedMap) (int, error) {
+	buf := &bytes.Buffer{}
+	enc := gob.NewEncoder(buf)
+	err := enc.Encode(obj)
+	if err != nil {
+		return 0, err
+	}
+	return bw.Write(buf.Bytes())
 }
 
 func (bw *BinaryBuffer) ReadInt32() (int32, error) {

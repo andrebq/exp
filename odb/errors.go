@@ -13,6 +13,8 @@ const (
 	InvalidIndexFind    = 1
 	UnableToReadStorage = 2
 	NoIndexProvided     = 4
+	ObjectFromOtherDB   = 8
+	InvalidType         = 16
 )
 
 var (
@@ -26,6 +28,14 @@ var (
 	errNoIndexProvided = Error{
 		NoIndexProvided,
 		"no index provided for the operation",
+	}
+	errObjectFromOtherDB = Error{
+		ObjectFromOtherDB,
+		"the object belgons to another db and can be manipulated by this one",
+	}
+	errInvalidType = Error{
+		InvalidType,
+		"unable to read/write the given type",
 	}
 )
 
