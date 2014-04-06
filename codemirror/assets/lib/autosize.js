@@ -1,22 +1,31 @@
 (function(global){
 
 function resize(element) {
-	var w = element.offsetWidth,
-		h = element.offsetHeight;
-	if (w == 0 || h == 0) {
-		return;
-		// wait for the next cycle
-		window.requestAnimationFrame(autosize);
+	// run the resize more than one time
+	var pendingResizes = 2;
+	var realResize = function() {
+		var w = element.offsetWidth,
+			h = element.offsetHeight;
+		if (w == 0 || h == 0) {
+			// wait for the next cycle
+			window.requestAnimationFrame(realResize);
+			return;
+		}
+		var cm = element.children[0].CodeMirror;
+		cm.setSize(w, h);
+		cm.refresh();
+		pendingResizes--;
+		if (pendingResizes > 0) {
+			window.requestAnimationFrame(realResize);
+		}
 	}
-	var cm = element.children[0].CodeMirror;
-	cm.setSize(w, h);
-	cm.refresh();
+	window.requestAnimationFrame(realResize)
 }
 
 function autosize() {
 	var elements = document.querySelectorAll(".gocm-editor");
 	var sz = elements.length;
-	for(var idx = 0; idx < sz; idz++) {
+	for(var idx = 0; idx < sz; idx++) {
 		el = elements[idx];
 		resize(el);
 	}

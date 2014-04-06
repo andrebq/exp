@@ -49,6 +49,24 @@ type Editor struct {
 	Prefix string
 }
 
+// Styles returns the list of paths that should be included in the
+// html to allow editor parts to be used.
+func (e *Editor) Styles() []string {
+	return []string{
+		path.Join(e.Prefix, "lib/codemirror.css"),
+		path.Join(e.Prefix, "lib/gocm.css"),
+	}
+}
+
+// Scripts returns the list of paths that should be include in the
+// script loading section to allow editor parts to be used
+func (e *Editor) Scripts() []string {
+	return []string{
+		path.Join(e.Prefix, "lib/codemirror.js"),
+		path.Join(e.Prefix, "lib/autosize.js"),
+	}
+}
+
 // ServeHTTP handles serving the text editor contents.
 //
 // Only static files are served from here
@@ -79,15 +97,9 @@ func (e *Editor) renderEditor(w http.ResponseWriter, req *http.Request, onlyPart
 	codemirrorTmpl := template.Must(template.New("").ParseFiles(gas.MustAbs("github.com/andrebq/exp/codemirror/codemirror.html")))
 
 	err := codemirrorTmpl.ExecuteTemplate(tmp, tmplName, map[string]interface{}{
-		"editorid": fmt.Sprintf("%v", <-ids),
-		"libcss": []string{
-			path.Join(req.URL.Path, "..", "lib/codemirror.css"),
-			path.Join(req.URL.Path, "..", "lib/gocm.css"),
-		},
-		"libscript": []string{
-			path.Join(req.URL.Path, "..", "lib/codemirror.js"),
-			path.Join(req.URL.Path, "..", "lib/autosize.js"),
-		},
+		"editorid":  fmt.Sprintf("%v", <-ids),
+		"libcss":    e.Styles(),
+		"libscript": e.Scripts(),
 	})
 	if err != nil {
 		log.Printf("[codemirror] error rendering template: %v", err)
