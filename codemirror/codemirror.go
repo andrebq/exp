@@ -63,7 +63,7 @@ func (e *Editor) Styles() []string {
 func (e *Editor) Scripts() []string {
 	return []string{
 		path.Join(e.Prefix, "lib/codemirror.js"),
-		path.Join(e.Prefix, "lib/autosize.js"),
+		path.Join(e.Prefix, "lib/gocm.js"),
 	}
 }
 

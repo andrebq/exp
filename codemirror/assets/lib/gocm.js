@@ -37,5 +37,25 @@ if (global.addEventListener) {
 
 global.GoCM = {};
 global.GoCM.autosize = autosize;
+global.GoCM.createEditorAt = function(el, autosize) {
+	while(el.children.length !== 0) {
+		el.removeChild(el.children[0]);
+	}
+	var cm = CodeMirror(el);
+	el.classList.add("gocm-editor");
+	if (autosize) {
+		autosize();
+	}
+};
+
+global.GoCM.editorOf = function(el) {
+	if (el.classList.contains("gocm-editor")) {
+		return el.children[0].CodeMirror;
+	} else if (el.CodeMirror !== undefined) {
+		return el.CodeMirror;
+	} else {
+		return null;
+	}
+};
 
 }(window));
