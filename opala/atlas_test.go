@@ -90,3 +90,34 @@ func TestAtlasUVRect(t *testing.T) {
 		t.Errorf("c00 should have uv %v but got %v", uvr00, c00.UVRect())
 	}
 }
+
+func TestNonPowerOf2(t *testing.T) {
+	cw, aw := float32(800), float32(1024)
+	ch, ah := float32(600), float32(1024)
+
+	uvr00 := UVRect{
+		BottomLeft: glm.Vector2{
+			X: 0,
+			Y: 0,
+		},
+		TopRight: glm.Vector2{
+			X: cw / aw,
+			Y: ch / ah,
+		},
+	}
+
+	at := NewAtlas(int(cw), int(ch), 1, 1)
+	dx, dy := float32(at.data.Bounds().Dx()), float32(at.data.Bounds().Dy())
+	if dx != aw || dy != ah {
+		t.Fatalf("invalid size. expected %v,%v got ¨%v,%v", aw, ah, dx, dy)
+	}
+	_ = uvr00
+
+	chunk, _ := at.AllocateDefault("uv")
+
+	rect := chunk.UVRect()
+
+	if !reflect.DeepEqual(rect, uvr00) {
+		t.Fatalf("expecting: %v got %v", uvr00, rect)
+	}
+}

@@ -59,11 +59,18 @@ func (t *Tick) renderCompleted() {
 // A display usually renders a world that is composed by
 // objects.
 type Display struct {
-	tick   *Tick
-	window *glfw.Window
+	tick      *Tick
+	window    *glfw.Window
+	lastAtlas *Atlas
 	// list of objects to render in the
 	// next frame
-	renderQueue []*Object
+	renderQueue cmdQueue
+	id          int
+}
+
+type cmdQueue struct {
+	sync.RWMutex
+	cmds []DrawCmd
 }
 
 func Vsync(vsync bool) {
@@ -82,6 +89,7 @@ func NewDisplay(width, height int, title string) (*Display, error) {
 	d := &Display{
 		tick: &Tick{},
 	}
+	d.renderQueue.cmds = make([]DrawCmd, 0, 0)
 
 	// initialize the timers
 	d.tick.tick()
@@ -92,6 +100,7 @@ func NewDisplay(width, height int, title string) (*Display, error) {
 	}
 	useGlfwStats(func(s *glfwStats) {
 		s.winCount++
+		d.id = s.winCount
 	})
 	return d, nil
 }
@@ -108,18 +117,65 @@ func (d *Display) Close() {
 	})
 }
 
+// SendDraw receives a DrawCmd and enqueue for later rendering.
+//
+// The order of rendering is determinated by the Render function and it
+// might or might not be the order of SendDraw.
+//
+// This method is safe to be used by multiple threads.
+func (d *Display) SendDraw(cmd DrawCmd) {
+	d.renderQueue.Lock()
+	defer d.renderQueue.Unlock()
+	d.renderQueue.cmds = append(d.renderQueue.cmds, cmd)
+}
+
 // Render will read the renderQueue and redraw them on the screen
 // after this the renderQueue is empty.
 func (d *Display) Render() {
 	d.tick.beginRender()
 	d.window.MakeContextCurrent()
 	gl.Init()
-	for _, obj := range d.renderQueue {
-		obj.render(d.tick.delta32)
+	d.renderQueue.RLock()
+	defer d.renderQueue.RUnlock()
+	if len(d.renderQueue.cmds) > 0 {
+		for _, obj := range d.renderQueue.cmds {
+			err := obj.Render(d)
+			if err != nil {
+				d.logErr(err)
+			}
+		}
+		d.renderQueue.cmds = d.renderQueue.cmds[:0]
+		d.window.SwapBuffers()
 	}
-	d.window.SwapBuffers()
 	d.tick.renderCompleted()
 	d.tick.tick()
+}
+
+func (d *Display) logErr(err error) {
+	log.Printf("[error]-[%v] %v", d.id, err)
+}
+
+func (d *Display) logInfo(info string) {
+	log.Printf("[info]-[%v] %v", d.id, info)
+}
+
+func (d *Display) bindAtlas(a *Atlas) error {
+	if d.lastAtlas == a {
+		return nil
+	}
+	if err := d.discardAtlas(); err != nil {
+		return err
+	}
+	d.lastAtlas = a
+	return d.lastAtlas.bind()
+}
+
+func (d *Display) discardAtlas() error {
+	if d.lastAtlas == nil {
+		return nil
+	}
+	// unbind and delete from video memory, just to be safe
+	return d.lastAtlas.unbind(true)
 }
 
 // AcquireInput read input from the user devices

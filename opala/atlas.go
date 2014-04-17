@@ -3,7 +3,9 @@ package opala
 import (
 	"fmt"
 	glm "github.com/Agon/googlmath"
+	"github.com/go-gl/gl"
 	"image"
+	"math"
 )
 
 // UVRect represent the coordinate system for
@@ -29,16 +31,43 @@ type Atlas struct {
 	chunks []*AtlasChunk
 	// Chunk width and height
 	cw, ch int
+
+	gltex gl.Texture
 }
 
-// This will create a new atlas with enough space to
-// nRows X nColumns chunks of widthXheight size
+// NewAtlas will create a new atlas with enough space to
+// at least nRows X nColumns chunks of widthXheight size. The total
+// number of chunks are determinated by the power of two rule below.
+//
+// The actual memory used might be larger since all atlas MUST BE
+// a power of 2 rect (16, 32, 64, 128...). But the rectangle used
+// by the chunk is limited to width/height.
 func NewAtlas(width, height, nRows, nColumns int) *Atlas {
+	_, max := minMaxOf(powerOfTwo(nRows*height), powerOfTwo(nColumns*width))
 	return &Atlas{
-		cw:   width,
-		ch:   height,
-		data: image.NewRGBA(image.Rect(0, 0, nRows*height, nColumns*width)),
+		cw:    width,
+		ch:    height,
+		data:  image.NewRGBA(image.Rect(0, 0, max, max)),
+		gltex: gl.Texture(gl.FALSE),
 	}
+}
+
+func powerOfTwo(val int) int {
+	val = int(math.Pow(2, math.Ceil(math.Log2(float64(val)))))
+	return val
+}
+
+func minMaxOf(values ...int) (int, int) {
+	min, max := values[0], values[0]
+	for _, v := range values {
+		if v < min {
+			min = v
+		}
+		if v > max {
+			max = v
+		}
+	}
+	return min, max
 }
 
 // AllocateMany will try to allocate at most count chunks
@@ -89,26 +118,58 @@ func (a *Atlas) ChunkAt(row, column int) *AtlasChunk {
 	return nil
 }
 
-func (a *Atlas) calculateUvFor(c *AtlasChunk) UVRect {
-	rows, cols := a.gridSize()
-	imgWidth, imgHeight := float32(cols*a.cw), float32(rows*a.ch)
-	// since in opengl the 0,0 means the bottomleft and
-	// image.RGBA 0,0 means topleft
-	// we need to offset cY by the heigth of each chunk
-	cX, cY := float32(c.column*a.cw), float32(c.row*a.ch+a.ch)
-	uvr := UVRect{
-		BottomLeft: glm.Vector2{
-			X: cX / imgWidth,
-			Y: 1 - cY/imgHeight,
-		},
+func (a *Atlas) unbind(release bool) error {
+	if !gl.Object(a.gltex).IsTexture() {
+		return nil
 	}
-	uvr.TopRight.X = uvr.BottomLeft.X + float32(a.cw)/imgWidth
-	uvr.TopRight.Y = uvr.BottomLeft.Y + float32(a.ch)/imgHeight
+	a.gltex.Unbind(gl.TEXTURE_2D)
+	if release {
+		a.gltex.Delete()
+	}
+	a.gltex = gl.Texture(gl.FALSE)
+	return checkGlError()
+}
+
+// bind the given atlas to the current GL context
+//
+// the current implementation is very stupid, since it will
+// upload the texture every single call.
+//
+// later, improve this to upload only if there is a real need for it
+func (a *Atlas) bind() error {
+	// discard any possible error
+	if err := checkGlError(); err != nil {
+		return err
+	}
+	if gl.Object(a.gltex).IsTexture() {
+		a.gltex = gl.GenTexture()
+	}
+	a.gltex.Bind(gl.TEXTURE_2D)
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, a.data.Bounds().Dx(), a.data.Bounds().Dy(), 0, gl.RGBA, gl.UNSIGNED_BYTE, a.data.Pix)
+	if err := checkGlError(gl.OUT_OF_MEMORY, gl.INVALID_OPERATION); err != nil {
+		return err
+	}
+
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	return checkGlError()
+}
+
+func (a *Atlas) calculateUvFor(c *AtlasChunk) UVRect {
+	uvr := UVRect{}
+	bounds := a.data.Bounds()
+	scaleX, scaleY := float32(a.cw)/float32(bounds.Dx()),
+		float32(a.ch)/float32(bounds.Dy())
+	cx, cy := scaleX*float32(c.column), scaleY*float32(c.row)
+	println("cx, cy: ", cx, cy)
+	println("sx, sy: ", scaleX, scaleY)
 	return uvr
 }
 
 func (a *Atlas) subImage(c *AtlasChunk) *image.RGBA {
-	return nil
+	x0, y0 := a.cw*c.column, a.ch*c.row
+	x1, y1 := x0+a.cw, y0+a.cw
+	return a.data.SubImage(image.Rect(x0, y0, x1, y1)).(*image.RGBA)
 }
 
 func (a *Atlas) findByName(name string) *AtlasChunk {
@@ -125,12 +186,14 @@ func (a *Atlas) emptyChunk() *AtlasChunk {
 		return &AtlasChunk{
 			row:    0,
 			column: 0,
+			atlas:  a,
 		}
 	}
 	last := a.chunks[len(a.chunks)-1]
 	next := &AtlasChunk{
 		row:    last.row,
 		column: last.column + 1,
+		atlas:  a,
 	}
 	// check if we can use the same row
 	// and the next column
@@ -164,6 +227,7 @@ func (a *Atlas) gridSize() (rows, cols int) {
 
 // hold the information about a chunk of an atlas
 type AtlasChunk struct {
+	atlas       *Atlas
 	subdata     *image.RGBA
 	name        string
 	row, column int
