@@ -1,7 +1,9 @@
 #version 330 core
 
+in vec2 UV;
 out vec3 color;
+uniform sampler2D mysample;
 
 void main() {
-	color = vec3(1,0,0);
+	color = texture2D(mysample, UV).rgb;
 }

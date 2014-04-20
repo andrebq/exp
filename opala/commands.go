@@ -60,6 +60,16 @@ func (d *DrawImage) Render(display *Display) error {
 }
 
 func (d *DrawImage) setUniforms() error {
+	p := d.program
+	gl.ActiveTexture(gl.TEXTURE0)
+	d.Image.atlas.bind()
+	if err := checkGlError(); err != nil {
+		return err
+	}
+
+	loc := p.GetUniformLocation("mysample")
+	loc.Uniform1i(0)
+
 	return checkGlError()
 }
 

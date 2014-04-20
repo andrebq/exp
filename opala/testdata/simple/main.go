@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/andrebq/exp/opala"
+	"image/color"
 )
 
 func main() {
@@ -14,6 +15,7 @@ func main() {
 	// to render images on the screen.
 	backgroundLayer := opala.NewAtlas(800, 600, 1, 1)
 	img, _ := backgroundLayer.AllocateDefault("img")
+	img.Fill(color.White)
 
 	dl := opala.NewDisplayList()
 	dl.Push(w)

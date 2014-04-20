@@ -5,6 +5,8 @@ import (
 	glm "github.com/Agon/googlmath"
 	"github.com/go-gl/gl"
 	"image"
+	"image/color"
+	"image/draw"
 	"math"
 )
 
@@ -241,6 +243,11 @@ func (ic *AtlasChunk) Size() (w, h int) {
 
 func (ic *AtlasChunk) UVRect() UVRect {
 	return ic.uvrect
+}
+
+func (ic *AtlasChunk) Fill(c color.Color) {
+	u := image.NewUniform(c)
+	draw.Draw(ic.subdata, ic.subdata.Bounds(), u, image.Point{0, 0}, draw.Over)
 }
 
 func (ic *AtlasChunk) String() string {
