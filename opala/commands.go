@@ -5,7 +5,6 @@ import (
 	glm "github.com/Agon/googlmath"
 	"github.com/andrebq/gas"
 	"github.com/go-gl/gl"
-	"github.com/go-gl/glh"
 	"io/ioutil"
 	"path/filepath"
 )
@@ -28,8 +27,9 @@ type DrawCmd interface {
 
 type DrawImage struct {
 	Image   *AtlasChunk
-	buf     *glh.MeshBuffer
 	program gl.Program
+	vertex  [][]float32
+	uv      [][]float32
 }
 
 func (d *DrawImage) Name() string { return "draw-image" }
@@ -38,7 +38,7 @@ func (d *DrawImage) Render(display *Display) error {
 	if err := display.bindAtlas(d.Image.atlas); err != nil {
 		return err
 	}
-	d.rebuildBuffer()
+	d.rebuildModel()
 	if err := d.rebuildProgram(); err != nil {
 		return err
 	}
@@ -63,23 +63,56 @@ func (d *DrawImage) setUniforms() error {
 	p := d.program
 	gl.ActiveTexture(gl.TEXTURE0)
 	d.Image.atlas.bind()
-	if err := checkGlError(); err != nil {
-		return err
-	}
+	panicGlError()
 
 	loc := p.GetUniformLocation("mysample")
 	loc.Uniform1i(0)
-
-	return checkGlError()
+	panicGlError()
+	return nil
 }
 
 func (d *DrawImage) render() error {
-	d.buf.Render(gl.TRIANGLES)
-	return checkGlError()
+	fn := func(idx int) (err error) {
+		defer func() {
+			//err = recover()
+		}()
+		vbuf := gl.GenBuffer()
+		vbuf.Bind(gl.ARRAY_BUFFER)
+		gl.BufferData(gl.ARRAY_BUFFER, len(d.vertex[idx])*4, d.vertex[idx], gl.STATIC_DRAW)
+		panicGlError()
+		defer vbuf.Delete()
+
+		uvbuf := gl.GenBuffer()
+		uvbuf.Bind(gl.ARRAY_BUFFER)
+		gl.BufferData(gl.ARRAY_BUFFER, len(d.uv[idx])*4, d.uv[idx], gl.STATIC_DRAW)
+		panicGlError()
+		defer uvbuf.Delete()
+
+		vloc := gl.AttribLocation(0)
+		vloc.EnableArray()
+		vbuf.Bind(gl.ARRAY_BUFFER)
+		vloc.AttribPointer(3, gl.FLOAT, false, 0, nil)
+		panicGlError()
+		defer vloc.DisableArray()
+
+		uvloc := gl.AttribLocation(1)
+		uvloc.EnableArray()
+		uvbuf.Bind(gl.ARRAY_BUFFER)
+		uvloc.AttribPointer(2, gl.FLOAT, false, 0, nil)
+		panicGlError()
+		defer uvloc.DisableArray()
+
+		gl.DrawArrays(gl.TRIANGLES, 0, 3)
+
+		return checkGlError()
+	}
+	if err := fn(0); err != nil {
+		return err
+	}
+	return fn(1)
 }
 
 func (d *DrawImage) clear() error {
-	d.buf.Clear()
 	d.program.Delete()
 	return checkGlError()
 }
@@ -97,26 +130,33 @@ func (d *DrawImage) rebuildProgram() error {
 	return checkGlError()
 }
 
-func (d *DrawImage) rebuildBuffer() {
-	buf := glh.NewMeshBuffer(
-		glh.RenderArrays,
+func (d *DrawImage) rebuildModel() {
+	if len(d.vertex) != 2 {
+		d.vertex = make([][]float32, 2)
+		d.uv = make([][]float32, 2)
+	}
 
-		glh.NewPositionAttr(3, gl.FLOAT, gl.STATIC_DRAW))
-
-	vertices := scale(0.5, []float32{
+	d.vertex[0] = scale(0.5, []float32{
 		-1, -1, 0,
 		-1, 1, 0,
 		1, 1, 0,
 	})
-	buf.Add(vertices)
+	d.uv[0] = []float32{
+		1, 0.5,
+		1, 0.5,
+		1, 0.5,
+	}
 
-	vertices = scale(0.5, []float32{
+	d.vertex[1] = scale(0.5, []float32{
 		1, 1, 0,
 		1, -1, 0,
 		-1, -1, 0,
 	})
-	buf.Add(vertices)
-	d.buf = buf
+	d.uv[1] = []float32{
+		1, 0.5,
+		1, 0.5,
+		1, 0.5,
+	}
 }
 
 func scale(scale float32, in []float32) []float32 {

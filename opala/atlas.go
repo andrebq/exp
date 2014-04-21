@@ -7,7 +7,9 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"image/png"
 	"math"
+	"os"
 )
 
 // UVRect represent the coordinate system for
@@ -152,9 +154,13 @@ func (a *Atlas) bind() error {
 		return err
 	}
 
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-	return checkGlError()
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+	gl.GenerateMipmap(gl.TEXTURE_2D)
+	panicGlError()
+	return nil
 }
 
 func (a *Atlas) calculateUvFor(c *AtlasChunk) UVRect {
@@ -248,6 +254,20 @@ func (ic *AtlasChunk) UVRect() UVRect {
 func (ic *AtlasChunk) Fill(c color.Color) {
 	u := image.NewUniform(c)
 	draw.Draw(ic.subdata, ic.subdata.Bounds(), u, image.Point{0, 0}, draw.Over)
+}
+
+func (ic *AtlasChunk) FromPNG(file string) error {
+	fd, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer fd.Close()
+	img, err := png.Decode(fd)
+	if err != nil {
+		return err
+	}
+	draw.Draw(ic.subdata, ic.subdata.Bounds(), img, image.Point{0, 0}, draw.Over)
+	return nil
 }
 
 func (ic *AtlasChunk) String() string {

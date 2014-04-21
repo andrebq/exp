@@ -12,6 +12,13 @@ func (e Error) Error() string {
 	return string(e)
 }
 
+func panicGlError() {
+	err := checkGlError()
+	if err != nil {
+		panic(err)
+	}
+}
+
 func checkGlError(expeced ...gl.GLenum) error {
 	gle := gl.GetError()
 	if gle != gl.NO_ERROR {

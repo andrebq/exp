@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/andrebq/exp/opala"
+	"github.com/andrebq/gas"
 	"image/color"
 )
 
@@ -15,7 +16,10 @@ func main() {
 	// to render images on the screen.
 	backgroundLayer := opala.NewAtlas(800, 600, 1, 1)
 	img, _ := backgroundLayer.AllocateDefault("img")
-	img.Fill(color.White)
+	pngfile := gas.MustAbs("github.com/andrebq/exp/opala/testdata/simple/f.png")
+	_ = pngfile
+	//img.FromPNG(gas.MustAbs(pngfile))
+	img.Fill(color.RGBA{255, 0, 255, 255})
 
 	dl := opala.NewDisplayList()
 	dl.Push(w)
