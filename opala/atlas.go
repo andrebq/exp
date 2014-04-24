@@ -15,8 +15,8 @@ import (
 // UVRect represent the coordinate system for
 // used by OpenGL
 type UVRect struct {
-	BottomLeft glm.Vector2
-	TopRight   glm.Vector2
+	// TopLeft (TL), TopRigth (TR), BottomLeft (BL), BottomRight (BR)
+	TL, TR, BL, BR glm.Vector2
 }
 
 // Atlas holds a large texture in memory and enable users
@@ -166,12 +166,34 @@ func (a *Atlas) bind() error {
 func (a *Atlas) calculateUvFor(c *AtlasChunk) UVRect {
 	uvr := UVRect{}
 	bounds := a.data.Bounds()
-	scaleX, scaleY := float32(a.cw)/float32(bounds.Dx()),
-		float32(a.ch)/float32(bounds.Dy())
-	cx, cy := scaleX*float32(c.column), scaleY*float32(c.row)
-	println("cx, cy: ", cx, cy)
-	println("sx, sy: ", scaleX, scaleY)
+	x0, y0 := c.column*a.ch, c.row*a.cw
+	x1, y1 := x0, y0+a.ch
+	x2, y2 := x0+a.cw, y0
+	// here x1, y1 is the bottom-left
+	// and x2, y2 is the top-rigth
+	// considering that 0,0 is top-left
+	// in opengl case, top-left is 0, Height
+	// to convert, just remove the Height from y1 and y2
+	y0, y1, y2 = bounds.Dy()-y0, bounds.Dy()-y1, bounds.Dy()-y2
+
+	// since uv must range from 0, 1
+	// and the image range from 0 to width/height
+	// we need a scale, ie, normalize the vector
+	uvr.TL.X, uvr.TL.Y = float32(x1), float32(y2)
+	uvr.TR.X, uvr.TR.Y = float32(x2), float32(y2)
+	uvr.BL.X, uvr.BL.Y = float32(x1), float32(y1)
+	uvr.BR.X, uvr.BR.Y = float32(x2), float32(y1)
+	X, Y := float32(bounds.Dx()), float32(bounds.Dy())
+	divideVectorBy(&uvr.TL, X, Y)
+	divideVectorBy(&uvr.TR, X, Y)
+	divideVectorBy(&uvr.BL, X, Y)
+	divideVectorBy(&uvr.BR, X, Y)
 	return uvr
+}
+
+func divideVectorBy(v *glm.Vector2, x, y float32) {
+	v.X = v.X / x
+	v.Y = v.Y / y
 }
 
 func (a *Atlas) subImage(c *AtlasChunk) *image.RGBA {
@@ -275,6 +297,5 @@ func (ic *AtlasChunk) String() string {
 		ic.name,
 		ic.row,
 		ic.column,
-		ic.uvrect.BottomLeft,
-		ic.uvrect.TopRight)
+		ic.uvrect)
 }
