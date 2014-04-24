@@ -27,6 +27,7 @@ type DrawCmd interface {
 
 type DrawImage struct {
 	Image   *AtlasChunk
+	mvp     *glm.Matrix4
 	program gl.Program
 	vertex  [][]float32
 	uv      [][]float32
@@ -38,7 +39,7 @@ func (d *DrawImage) Render(display *Display) error {
 	if err := display.bindAtlas(d.Image.atlas); err != nil {
 		return err
 	}
-	d.rebuildModel()
+	d.rebuildModel(display)
 	if err := d.rebuildProgram(); err != nil {
 		return err
 	}
@@ -67,6 +68,10 @@ func (d *DrawImage) setUniforms() error {
 
 	loc := p.GetUniformLocation("mysample")
 	loc.Uniform1i(0)
+	panicGlError()
+
+	worldMatrix := p.GetUniformLocation("MVP")
+	worldMatrix.UniformMatrix4f(false, ptrForMatrix(d.mvp))
 	panicGlError()
 	return nil
 }
@@ -130,13 +135,16 @@ func (d *DrawImage) rebuildProgram() error {
 	return checkGlError()
 }
 
-func (d *DrawImage) rebuildModel() {
+func (d *DrawImage) rebuildModel(display *Display) {
 	if len(d.vertex) != 2 {
 		d.vertex = make([][]float32, 2)
 		d.uv = make([][]float32, 2)
 	}
 
-	d.vertex[0] = scale(0.5, []float32{
+	modelM := glm.NewIdentityMatrix4()
+	d.mvp = display.vp.Mul(modelM)
+
+	d.vertex[0] = scale(10, []float32{
 		-1, -1, 0,
 		-1, 1, 0,
 		1, 1, 0,
@@ -147,7 +155,7 @@ func (d *DrawImage) rebuildModel() {
 		1, 0.5,
 	}
 
-	d.vertex[1] = scale(0.5, []float32{
+	d.vertex[1] = scale(10, []float32{
 		1, 1, 0,
 		1, -1, 0,
 		-1, -1, 0,
@@ -224,4 +232,14 @@ func compileProgram(dir, program string) (glProg gl.Program, err error) {
 	glProg.Use()
 
 	return
+}
+
+func ptrForMatrix(m *glm.Matrix4) *[16]float32 {
+	ret := [16]float32{
+		m.M11, m.M12, m.M13, m.M14,
+		m.M21, m.M22, m.M23, m.M24,
+		m.M31, m.M32, m.M33, m.M34,
+		m.M41, m.M42, m.M43, m.M44,
+	}
+	return &ret
 }

@@ -1,6 +1,7 @@
 package opala
 
 import (
+	glm "github.com/Agon/googlmath"
 	"github.com/go-gl/gl"
 	glfw "github.com/go-gl/glfw3"
 	"log"
@@ -66,6 +67,7 @@ type Display struct {
 	// next frame
 	renderQueue cmdQueue
 	id          int
+	vp          *glm.Matrix4
 }
 
 type cmdQueue struct {
@@ -95,6 +97,7 @@ func NewDisplay(width, height int, title string) (*Display, error) {
 	d.tick.tick()
 
 	d.window, err = glfw.CreateWindow(width, height, title, nil, nil)
+	d.updateMatrices(width, height)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +106,16 @@ func NewDisplay(width, height int, title string) (*Display, error) {
 		d.id = s.winCount
 	})
 	return d, nil
+}
+
+func (d *Display) updateMatrices(w, h int) {
+	viewM := glm.NewLookAtMatrix4(
+		glm.Vector3{0, 0, 1},
+		glm.Vector3{0, 0, 0},
+		glm.Vector3{0, -1, 0})
+	width, height := float32(w), float32(h)
+	projection := glm.NewOrthoMatrix4(-width/2, width/2, -height/2, height/2, 0, 100)
+	d.vp = projection.Mul(viewM)
 }
 
 func (d *Display) Close() {
