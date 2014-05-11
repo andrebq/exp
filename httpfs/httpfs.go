@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 )
 
 // Mount is used to represent a local directory and have functions
@@ -69,6 +70,7 @@ func (m *Mount) CreateOrOpenFileForWrite(u *url.URL) (*os.File, error) {
 type RawFS struct {
 	mount    *Mount
 	metaBase string
+	rawBase  string
 }
 
 // ServeHTTP expose the raw files over HTTP
@@ -92,7 +94,11 @@ func (r *RawFS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if info.IsDir() {
-		r.serveDir(w, req, info)
+		if !strings.HasSuffix(req.URL.Path, "/") {
+			http.Redirect(w, req, path.Join(r.rawBase, req.URL.Path)+"/", http.StatusFound)
+		} else {
+			r.serveDir(w, req, info)
+		}
 	} else {
 		r.serveFile(w, req, info)
 	}
@@ -251,7 +257,6 @@ type HttpFS struct {
 	meta *MetaFS
 	raw  *RawFS
 	idx  *IndexFS
-	mux  *http.ServeMux
 }
 
 // NewHttpFS create a new HttpFS with read/write access over the given Mount and
@@ -265,18 +270,32 @@ type HttpFS struct {
 func NewHttpFS(m *Mount, prefix string) *HttpFS {
 	r := &HttpFS{}
 	prefix = path.Clean(prefix)
-	r.raw = &RawFS{mount: m, metaBase: path.Join(prefix, "/meta/")}
-	r.meta = &MetaFS{mount: m, rawBase: path.Join(prefix, "/raw/")}
+	r.raw = &RawFS{mount: m, metaBase: path.Join(prefix, "/meta/"), rawBase: path.Join(prefix, "/raw/")}
+	r.meta = &MetaFS{mount: m, rawBase: r.raw.rawBase}
 	r.idx = &IndexFS{prefix: prefix}
-	r.mux = http.NewServeMux()
-	r.mux.Handle("/meta/", http.StripPrefix("/meta", r.meta))
-	r.mux.Handle("/raw/", http.StripPrefix("/raw", r.raw))
-	r.mux.Handle("/", r.idx)
 	return r
 }
 
 // Expose the HttpFS
 func (h *HttpFS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	log.Printf("[httpfs]-[%v]-%v", req.Method, req.URL)
-	h.mux.ServeHTTP(w, req)
+	if req.URL.Path == "/" || req.URL.Path == "" {
+		// indexfs
+		h.idx.ServeHTTP(w, req)
+	} else if req.URL.Path == "/raw" || req.URL.Path == "/meta" {
+		switch req.Method {
+		case "GET", "HEAD":
+			http.Redirect(w, req, path.Join(h.idx.prefix, req.URL.Path)+"/", http.StatusMovedPermanently)
+		default:
+			http.Error(w, "root only allows GET or HEAD", http.StatusMethodNotAllowed)
+		}
+	} else if strings.HasPrefix(req.URL.Path, "/raw/") {
+		req.URL.Path = req.URL.Path[4:]
+		h.raw.ServeHTTP(w, req)
+	} else if strings.HasPrefix(req.URL.Path, "/meta/") {
+		req.URL.Path = req.URL.Path[5:]
+		h.meta.ServeHTTP(w, req)
+	} else {
+		http.Error(w, "not found", http.StatusNotFound)
+	}
 }
