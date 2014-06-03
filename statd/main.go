@@ -39,6 +39,13 @@ const (
 	StatsSelect = `select s.id, s.system, s.subsystem, s.message, s.context, to_char(s.servertime, 'yyyy-mm-dd HH24:MI:SS:MS'), s.clienttime, s.error, si.info from stats s inner join stats_info si on s.id = si.stats_id`
 )
 
+type Bucket struct {
+	Id int
+	Bucket string
+	ServerTimeNano uint64
+	Info map[string]interface{}
+}
+
 type Stats struct {
 	Id int
 	System string
@@ -55,7 +62,23 @@ type Stats struct {
 type StatsDB struct {
 	conn *sql.DB
 	newStat chan Stats
+	newBucketData chan Bucket
 	done chan struct{}
+}
+
+func (db *StatsDB) PushBucket(bucket *Bucket) error {
+	var lastid int
+
+	buf := &bytes.Buffer{}
+	enc := json.NewEncoder(buf)
+	err := enc.Encode(bucket.Info)
+	if err != nil {
+		return err
+	}
+
+	err = db.conn.QueryRow("insert into buckets(bucket, servertime, info) values ($1, $2, $3)) returning id",
+		bucket.Bucket, time.Now(), string(buf.Bytes())).Scan(&lastid)
+	return err
 }
 
 func (db *StatsDB) Push(st *Stats) error {
@@ -148,8 +171,10 @@ func (db *StatsDB) CreateTables() error {
 	cmds := []string {
 `create sequence stats_seq increment 1 minvalue 1 maxvalue 9223372036854775807 start 1 cache 1`,
 `create sequence stats_info_seq increment 1 minvalue 1 maxvalue 9223372036854775807 start 1 cache 1`,
+`create sequence buckets_seq increment 1 minvalue 1 maxvalue 9223372036854775807 start 1 cache 1`,
 `create table stats(id integer not null default nextval('stats_seq'), system char varying(255) not null, subsystem char varying(255), message char varying(255), context char varying(255), servertime timestamp not null, clienttime char varying(100), error boolean)`,
 `create table stats_info(id integer not null default nextval('stats_info_seq'), stats_id integer, info text)`,
+`create table buckets(id integer not null default nextval('buckets_seq'), bucket varchar(255), servertime timestamp not null, info char varying(1024))`,
 	}
 	var firsterr error
 	for _, cmd := range cmds {
@@ -203,6 +228,7 @@ func MakeStatsStream(db *StatsDB) websocket.Handler {
 			printf("starting stream to: %v at id: %v", conn.Request().RemoteAddr, lastId)
 		}
 		enc := json.NewEncoder(conn)
+		var backtime int
 		newData := false
 		for {
 			data, err := db.FetchAfterId(int(lastId), 100)
@@ -221,8 +247,14 @@ func MakeStatsStream(db *StatsDB) websocket.Handler {
 				fmt.Fprintf(conn, "\r\n")
 			}
 			if !newData {
+				backtime = backtime + 10
+				if backtime > 300 {
+					backtime = 300
+				}
 				printf("no more data to stream, wait a few seconds")
-				<-time.After(time.Second * 30)
+				<-time.After(time.Minute + (time.Second * time.Duration(backtime)))
+			} else {
+				backtime = 0
 			}
 			newData = false
 		}
