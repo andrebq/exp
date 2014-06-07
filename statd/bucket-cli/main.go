@@ -2,19 +2,21 @@ package main
 
 import (
 	"bytes"
-	"flag"
-	"net/http"
 	"encoding/json"
+	"flag"
 	"io/ioutil"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 )
 
 var (
 	bucketServer = flag.String("host", "http://localhost:4001/buckets", "Host to store the bucket")
-	bucketName = flag.String("b", "", "Bucket name")
-	doGet = flag.Bool("get", false, "Should make a GET instead of POST")
-	help = flag.Bool("h", false, "Help")
+	bucketName   = flag.String("b", "", "Bucket name")
+	doGet        = flag.Bool("get", false, "Should make a GET instead of POST")
+	doDelete     = flag.Bool("delete", false, "Remove the data from the server")
+	help         = flag.Bool("h", false, "Help")
 )
 
 func main() {
@@ -36,6 +38,44 @@ func main() {
 		return
 	}
 
+	if *doDelete {
+		cmdDelete()
+		return
+	}
+
+	cmdPost()
+}
+
+func cmdDelete() {
+	target, err := url.Parse(*bucketServer + "/")
+	if err != nil {
+		log.Printf("unable to parse url: %v", err)
+		return
+	}
+	params := make(url.Values)
+	params.Add("bucket", *bucketName)
+	target.RawQuery = params.Encode()
+	urlStr := target.String()
+	log.Printf("url: %v", urlStr)
+	if req, err := http.NewRequest("DELETE", urlStr, nil); err != nil {
+		log.Printf("Error preparing the request: %v", err)
+		return
+	} else {
+		if res, err := http.DefaultClient.Do(req); err != nil {
+			log.Printf("Error sending bucket to server: %v", err)
+			return
+		} else {
+			defer res.Body.Close()
+			if res.StatusCode != 200 {
+				log.Printf("invalid status code. expecting 200 got %v", res.StatusCode)
+				data, _ := ioutil.ReadAll(res.Body)
+				log.Printf(string(data))
+			}
+		}
+	}
+}
+
+func cmdPost() {
 	obj := make(map[string]interface{})
 	dec := json.NewDecoder(os.Stdin)
 	if err := dec.Decode(&obj); err != nil {
@@ -64,6 +104,7 @@ func main() {
 			defer res.Body.Close()
 			if res.StatusCode != 200 {
 				log.Printf("invalid status code. expecting 200 got %v", res.StatusCode)
+			} else {
 				data, _ := ioutil.ReadAll(res.Body)
 				log.Printf(string(data))
 			}

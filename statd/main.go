@@ -20,6 +20,17 @@ import (
 	"time"
 )
 
+const (
+	DefaultSize = 500
+	MaxSize     = 1000
+
+	DateTimeFormatFromServer = "2006-01-02 15:04:05.000"
+	StatsSelect              = `select s.id, s.system, s.subsystem, s.message, s.context, to_char(s.servertime, 'yyyy-mm-dd HH24:MI:SS:MS'), s.clienttime, s.error, si.info from stats s inner join stats_info si on s.id = si.stats_id `
+	BucketSelect             = `select b.id, to_char(b.servertime, 'yyyy-mm-dd HH24:MI:SS:MS'), b.bucket, b.info from buckets b where deleted = 'f' `
+	EntriesInBucketSelect    = `select count(*) from buckets b where deleted = 'f'`
+	DeleteBucketSelect       = `update buckets set deleted = true where bucket = $1`
+)
+
 var (
 	dbuser   = flag.String("dbuser", "statsd", "Database user")
 	dbpasswd = flag.String("dbpasswd", "statsd", "Database password")
@@ -30,16 +41,6 @@ var (
 	help     = flag.Bool("h", false, "Help")
 
 	exitStatus int
-)
-
-const (
-	DefaultSize = 500
-	MaxSize     = 1000
-
-	DateTimeFormatFromServer = "2006-01-02 15:04:05.000"
-	StatsSelect              = `select s.id, s.system, s.subsystem, s.message, s.context, to_char(s.servertime, 'yyyy-mm-dd HH24:MI:SS:MS'), s.clienttime, s.error, si.info from stats s inner join stats_info si on s.id = si.stats_id `
-	BucketSelect             = `select b.id, to_char(b.servertime, 'yyyy-mm-dd HH24:MI:SS:MS'), b.bucket, b.info from buckets b `
-	EntriesInBucketSelect    = `select count(*) from buckets b `
 )
 
 type Bucket struct {
@@ -234,7 +235,7 @@ func (db *StatsDB) Fetch(size int) (<-chan Stats, error) {
 }
 
 func (db *StatsDB) FetchBucket(bucket string) (<-chan Bucket, error) {
-	result, err := db.conn.Query(BucketSelect+" where b.bucket = $1 order by b.servertime asc", bucket)
+	result, err := db.conn.Query(BucketSelect+" and b.bucket = $1 order by b.servertime asc", bucket)
 	if err != nil {
 		printf("error running query: %v", err)
 		return nil, err
@@ -246,11 +247,16 @@ func (db *StatsDB) FetchBucket(bucket string) (<-chan Bucket, error) {
 
 func (db *StatsDB) EntriesInBucket(bucket string) (int, error) {
 	var out int
-	err := db.conn.QueryRow(EntriesInBucketSelect+" where b.bucket = $1", bucket).Scan(&out)
+	err := db.conn.QueryRow(EntriesInBucketSelect+" and b.bucket = $1", bucket).Scan(&out)
 	if err != nil {
 		printf("error running query: %v", err)
 	}
 	return out, err
+}
+
+func (db *StatsDB) DeleteBucketEntries(bucket string) error {
+	_, err := db.conn.Exec(DeleteBucketSelect, bucket)
+	return err
 }
 
 func NewStatsDB(user, pwd, host, dbname string) (*StatsDB, error) {
@@ -276,7 +282,7 @@ func (db *StatsDB) CreateTables() error {
 		`create sequence buckets_seq increment 1 minvalue 1 maxvalue 9223372036854775807 start 1 cache 1`,
 		`create table stats(id integer not null default nextval('stats_seq'), system char varying(255) not null, subsystem char varying(255), message char varying(255), context char varying(255), servertime timestamp not null, clienttime char varying(100), error boolean)`,
 		`create table stats_info(id integer not null default nextval('stats_info_seq'), stats_id integer, info text)`,
-		`create table buckets(id integer not null default nextval('buckets_seq'), bucket varchar(255), servertime timestamp not null, info char varying(1024))`,
+		`create table buckets(id integer not null default nextval('buckets_seq'), bucket varchar(255), servertime timestamp not null, deleted boolean not null default 'f', info char varying(1024))`,
 	}
 	var firsterr error
 	for _, cmd := range cmds {
@@ -501,7 +507,26 @@ func (bh *BucketHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		} else {
 			bh.handleGet(w, req)
 		}
+	} else if req.Method == "DELETE" {
+		bh.handleDelete(w, req)
 	}
+}
+
+func (bh *BucketHandler) handleDelete(w http.ResponseWriter, req *http.Request) {
+	req.ParseForm()
+	val := req.Form.Get("bucket")
+	if len(val) == 0 {
+		http.Error(w, "missing required parameter bucket", http.StatusBadRequest)
+		return
+	}
+
+	err := bh.db.DeleteBucketEntries(val)
+	if err != nil {
+		http.Error(w, "error deleting bucket", http.StatusInternalServerError)
+		return
+	}
+
+	http.Error(w, "OK", http.StatusOK)
 }
 
 func (bh *BucketHandler) handleCount(w http.ResponseWriter, req *http.Request) {

@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	h = flag.Bool("h", false, "Help")
-	wsAddr = flag.String("wsAddr", "", "Address for the websocket")
+	h        = flag.Bool("h", false, "Help")
+	wsAddr   = flag.String("wsAddr", "", "Address for the websocket")
 	wsOrigin = flag.String("origin", "", "Origin")
 )
 
