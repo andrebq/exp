@@ -2,17 +2,17 @@
 package main
 
 import (
-	_ "net/http/pprof"
+	"bufio"
 	"bytes"
 	"code.google.com/p/go.net/websocket"
-	"log"
-	_ "github.com/lib/pq"
 	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"bufio"
+	_ "github.com/lib/pq"
+	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"reflect"
 	"strconv"
@@ -21,36 +21,39 @@ import (
 )
 
 var (
-	dbuser = flag.String("dbuser", "statsd", "Database user")
+	dbuser   = flag.String("dbuser", "statsd", "Database user")
 	dbpasswd = flag.String("dbpasswd", "statsd", "Database password")
-	dbname = flag.String("dbname", "statsd", "Database name")
-	dbhost = flag.String("dbhost", "localhost", "Database host")
-	initdb = flag.Bool("initdb", false, "Initialize the tables on the database")
+	dbname   = flag.String("dbname", "statsd", "Database name")
+	dbhost   = flag.String("dbhost", "localhost", "Database host")
+	initdb   = flag.Bool("initdb", false, "Initialize the tables on the database")
 	httpaddr = flag.String("httpaddr", "0.0.0.0:4001", "Address to listen for incoming http requests")
-	help = flag.Bool("h", false, "Help")
+	help     = flag.Bool("h", false, "Help")
 
 	exitStatus int
 )
 
 const (
 	DefaultSize = 500
-	MaxSize = 1000
+	MaxSize     = 1000
 
 	DateTimeFormatFromServer = "2006-01-02 15:04:05.000"
-	StatsSelect = `select s.id, s.system, s.subsystem, s.message, s.context, to_char(s.servertime, 'yyyy-mm-dd HH24:MI:SS:MS'), s.clienttime, s.error, si.info from stats s inner join stats_info si on s.id = si.stats_id`
-	BucketSelect = `select b.id, to_char(b.servertime, 'yyyy-mm-dd HH24:MI:SS:MS'), b.bucket, b.info from buckets b `
+	StatsSelect              = `select s.id, s.system, s.subsystem, s.message, s.context, to_char(s.servertime, 'yyyy-mm-dd HH24:MI:SS:MS'), s.clienttime, s.error, si.info from stats s inner join stats_info si on s.id = si.stats_id `
+	BucketSelect             = `select b.id, to_char(b.servertime, 'yyyy-mm-dd HH24:MI:SS:MS'), b.bucket, b.info from buckets b `
+	EntriesInBucketSelect    = `select count(*) from buckets b `
 )
 
 type Bucket struct {
-	Id int
-	Bucket string
-	ServerTime string
+	Id             int
+	Bucket         string
+	ServerTime     string
 	ServerTimeNano uint64
-	Info map[string]interface{}
+	Info           map[string]interface{}
 }
 
 func (b *Bucket) MergeWith(o *Bucket) {
-	if o == nil || b == nil { return }
+	if o == nil || b == nil {
+		return
+	}
 	for k, v := range o.Info {
 		if old, has := b.Info[k]; has {
 			b.Info[k] = combineValues(old, v)
@@ -64,7 +67,7 @@ func combineValues(a, b interface{}) interface{} {
 	var out []interface{}
 	switch tmp := a.(type) {
 	case []interface{}:
-		out = tmp;
+		out = tmp
 		a = nil
 	default:
 		out = make([]interface{}, 0)
@@ -97,23 +100,23 @@ func putInto(out []interface{}, a interface{}) []interface{} {
 }
 
 type Stats struct {
-	Id int
-	System string
-	SubSystem string
-	Message string
+	Id             int
+	System         string
+	SubSystem      string
+	Message        string
 	ServerTimeNano uint64
-	ServerTime string
-	ClientTime string
-	Context string
-	Error bool
-	Info map[string]string
+	ServerTime     string
+	ClientTime     string
+	Context        string
+	Error          bool
+	Info           map[string]string
 }
 
 type StatsDB struct {
-	conn *sql.DB
-	newStat chan Stats
+	conn      *sql.DB
+	newStat   chan Stats
 	newBucket chan Bucket
-	done chan struct{}
+	done      chan struct{}
 }
 
 func (db *StatsDB) PushBucket(bucket *Bucket) error {
@@ -209,7 +212,7 @@ LOOP:
 }
 
 func (db *StatsDB) FetchAfterId(lastId, size int) (chan Stats, error) {
-	result, err := db.conn.Query(StatsSelect + " where s.id > $1 order by s.context, s.servertime desc limit $2", lastId, size)
+	result, err := db.conn.Query(StatsSelect+" where s.id > $1 order by s.context, s.servertime desc limit $2", lastId, size)
 	if err != nil {
 		printf("error running query: %v", err)
 		return nil, err
@@ -220,7 +223,7 @@ func (db *StatsDB) FetchAfterId(lastId, size int) (chan Stats, error) {
 }
 
 func (db *StatsDB) Fetch(size int) (<-chan Stats, error) {
-	result, err := db.conn.Query(StatsSelect + " order by s.context, s.servertime desc limit $1", size)
+	result, err := db.conn.Query(StatsSelect+" order by s.context, s.servertime desc limit $1", size)
 	if err != nil {
 		printf("error running query: %v", err)
 		return nil, err
@@ -231,13 +234,22 @@ func (db *StatsDB) Fetch(size int) (<-chan Stats, error) {
 }
 
 func (db *StatsDB) FetchBucket(bucket string) (<-chan Bucket, error) {
-	result, err := db.conn.Query(BucketSelect + " where b.bucket = $1 order by b.servertime asc", bucket)
+	result, err := db.conn.Query(BucketSelect+" where b.bucket = $1 order by b.servertime asc", bucket)
 	if err != nil {
 		printf("error running query: %v", err)
 		return nil, err
 	}
 	out := make(chan Bucket, 0)
 	go db.streamBuckets(result, out)
+	return out, err
+}
+
+func (db *StatsDB) EntriesInBucket(bucket string) (int, error) {
+	var out int
+	err := db.conn.QueryRow(EntriesInBucketSelect+" where b.bucket = $1", bucket).Scan(&out)
+	if err != nil {
+		printf("error running query: %v", err)
+	}
 	return out, err
 }
 
@@ -248,23 +260,23 @@ func NewStatsDB(user, pwd, host, dbname string) (*StatsDB, error) {
 		return nil, err
 	}
 	db := &StatsDB{
-		conn: sqldb,
-		newStat: make(chan Stats, 1),
+		conn:      sqldb,
+		newStat:   make(chan Stats, 1),
 		newBucket: make(chan Bucket, 1),
-		done: make(chan struct{}, 0),
+		done:      make(chan struct{}, 0),
 	}
 	go db.serve()
 	return db, nil
 }
 
 func (db *StatsDB) CreateTables() error {
-	cmds := []string {
-`create sequence stats_seq increment 1 minvalue 1 maxvalue 9223372036854775807 start 1 cache 1`,
-`create sequence stats_info_seq increment 1 minvalue 1 maxvalue 9223372036854775807 start 1 cache 1`,
-`create sequence buckets_seq increment 1 minvalue 1 maxvalue 9223372036854775807 start 1 cache 1`,
-`create table stats(id integer not null default nextval('stats_seq'), system char varying(255) not null, subsystem char varying(255), message char varying(255), context char varying(255), servertime timestamp not null, clienttime char varying(100), error boolean)`,
-`create table stats_info(id integer not null default nextval('stats_info_seq'), stats_id integer, info text)`,
-`create table buckets(id integer not null default nextval('buckets_seq'), bucket varchar(255), servertime timestamp not null, info char varying(1024))`,
+	cmds := []string{
+		`create sequence stats_seq increment 1 minvalue 1 maxvalue 9223372036854775807 start 1 cache 1`,
+		`create sequence stats_info_seq increment 1 minvalue 1 maxvalue 9223372036854775807 start 1 cache 1`,
+		`create sequence buckets_seq increment 1 minvalue 1 maxvalue 9223372036854775807 start 1 cache 1`,
+		`create table stats(id integer not null default nextval('stats_seq'), system char varying(255) not null, subsystem char varying(255), message char varying(255), context char varying(255), servertime timestamp not null, clienttime char varying(100), error boolean)`,
+		`create table stats_info(id integer not null default nextval('stats_info_seq'), stats_id integer, info text)`,
+		`create table buckets(id integer not null default nextval('buckets_seq'), bucket varchar(255), servertime timestamp not null, info char varying(1024))`,
 	}
 	var firsterr error
 	for _, cmd := range cmds {
@@ -309,50 +321,50 @@ LOOP:
 func MakeBucketStream(db *StatsDB) websocket.Handler {
 	return nil
 	/*
-	streamBucket := func(conn *websocket.Conn) {
-		defer conn.Close()
-		reader := bufio.NewReader(conn)
-		updatedat := conn.Request().URL.Get("updatedat")
+		streamBucket := func(conn *websocket.Conn) {
+			defer conn.Close()
+			reader := bufio.NewReader(conn)
+			updatedat := conn.Request().URL.Get("updatedat")
 
-		lastUpdate, err := time.Parse(DateTimeFormatFromServer, updatedat)
-		if err != nil {
-			printf("error decoding lastid using default. %v", err)
-			return
-		} else {
-			printf("starting stream to: %v at id: %v", conn.Request().RemoteAddr, lastId)
-		}
-		enc := json.NewEncoder(conn)
-		var backtime int
-		newData := false
-		for {
-			data, err := db.BucketUpdatedAfter(lastUpdate, 100)
+			lastUpdate, err := time.Parse(DateTimeFormatFromServer, updatedat)
 			if err != nil {
-				printf("error reading data from database: %v", err)
+				printf("error decoding lastid using default. %v", err)
 				return
+			} else {
+				printf("starting stream to: %v at id: %v", conn.Request().RemoteAddr, lastId)
 			}
-			for v := range data {
-				lastId = int64(v.Id)
-				newData = true
-				err = enc.Encode(&v)
+			enc := json.NewEncoder(conn)
+			var backtime int
+			newData := false
+			for {
+				data, err := db.BucketUpdatedAfter(lastUpdate, 100)
 				if err != nil {
-					printf("error encoding data to client: %v", err)
+					printf("error reading data from database: %v", err)
 					return
 				}
-				fmt.Fprintf(conn, "\r\n")
-			}
-			if !newData {
-				backtime = backtime + 10
-				if backtime > 300 {
-					backtime = 300
+				for v := range data {
+					lastId = int64(v.Id)
+					newData = true
+					err = enc.Encode(&v)
+					if err != nil {
+						printf("error encoding data to client: %v", err)
+						return
+					}
+					fmt.Fprintf(conn, "\r\n")
 				}
-				printf("no more data to stream, wait a few seconds")
-				<-time.After(time.Minute + (time.Second * time.Duration(backtime)))
-			} else {
-				backtime = 0
+				if !newData {
+					backtime = backtime + 10
+					if backtime > 300 {
+						backtime = 300
+					}
+					printf("no more data to stream, wait a few seconds")
+					<-time.After(time.Minute + (time.Second * time.Duration(backtime)))
+				} else {
+					backtime = 0
+				}
+				newData = false
 			}
-			newData = false
-		}
-	}*/
+		}*/
 }
 
 func MakeStatsStream(db *StatsDB) websocket.Handler {
@@ -455,7 +467,9 @@ func (sh *StatsHandler) handleGet(w http.ResponseWriter, req *http.Request) {
 	enc := json.NewEncoder(w)
 	first := true
 	for s := range data {
-		if !first { fmt.Fprintf(w, ",") }
+		if !first {
+			fmt.Fprintf(w, ",")
+		}
 		err = enc.Encode(&s)
 		if err != nil {
 			printf("error encoding json to client %v", err)
@@ -482,10 +496,28 @@ func (bh *BucketHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	} else if req.Method == "GET" {
 		if strings.HasSuffix(req.URL.Path, "/merge") {
 			bh.handleMergeGet(w, req)
+		} else if strings.HasSuffix(req.URL.Path, "/count") {
+			bh.handleCount(w, req)
 		} else {
 			bh.handleGet(w, req)
 		}
 	}
+}
+
+func (bh *BucketHandler) handleCount(w http.ResponseWriter, req *http.Request) {
+	req.ParseForm()
+	val := req.Form.Get("bucket")
+	if len(val) == 0 {
+		http.Error(w, "missing required parameter bucket", http.StatusBadRequest)
+		return
+	}
+
+	count, err := bh.db.EntriesInBucket(val)
+	if err != nil {
+		http.Error(w, "error counting buckets", http.StatusInternalServerError)
+		return
+	}
+	fmt.Fprintf(w, "%v", count)
 }
 
 func (bh *BucketHandler) handlePost(w http.ResponseWriter, req *http.Request) {
@@ -556,7 +588,9 @@ func (bh *BucketHandler) handleGet(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "[")
 
 	for s := range data {
-		if !first { fmt.Fprintf(w, ",") }
+		if !first {
+			fmt.Fprintf(w, ",")
+		}
 		err = enc.Encode(&s)
 		if err != nil {
 			printf("error encoding json to client %v", err)
