@@ -236,7 +236,7 @@ func (db *StatsDB) Fetch(size int) (<-chan Stats, error) {
 	return out, err
 }
 
-func (db *StatsDB) FetchBucket(args url.Values) (<-chan Bucket, error) {
+func (db *StatsDB) FetchBucket(args url.Values, maxSize int) (<-chan Bucket, error) {
 	query := &bytes.Buffer{}
 	var queryArgs []interface{}
 	fmt.Fprintf(query, BucketSelect)
@@ -284,7 +284,12 @@ func (db *StatsDB) FetchBucket(args url.Values) (<-chan Bucket, error) {
 		queryArgs = append(queryArgs, time)
 	}
 
-	fmt.Fprintf(query, " order by b.servertime asc")
+	fmt.Fprintf(query, " order by b.servertime asc ")
+
+	if maxSize > 0 {
+		fmt.Fprintf(query, " limit $%v", len(queryArgs)+1)
+		queryArgs = append(queryArgs, maxSize)
+	}
 
 	result, err := db.conn.Query(string(query.Bytes()), queryArgs...)
 
@@ -382,52 +387,45 @@ LOOP:
 }
 
 func MakeBucketStream(db *StatsDB) websocket.Handler {
-	return nil
-	/*
-		streamBucket := func(conn *websocket.Conn) {
-			defer conn.Close()
-			reader := bufio.NewReader(conn)
-			updatedat := conn.Request().URL.Get("updatedat")
-
-			lastUpdate, err := time.Parse(DateTimeFormatFromServer, updatedat)
+	streamBucket := func(conn *websocket.Conn) {
+		defer conn.Close()
+		enc := json.NewEncoder(conn)
+		values := conn.Request().URL.Query()
+		printf("bucketstream. url: %v", conn.Request().URL)
+		var backtime int
+		var lastId int64
+		newData := false
+		for {
+			data, err := db.FetchBucket(values, 100)
 			if err != nil {
-				printf("error decoding lastid using default. %v", err)
+				printf("error reading data from database: %v", err)
 				return
-			} else {
-				printf("starting stream to: %v at id: %v", conn.Request().RemoteAddr, lastId)
 			}
-			enc := json.NewEncoder(conn)
-			var backtime int
-			newData := false
-			for {
-				data, err := db.BucketUpdatedAfter(lastUpdate, 100)
+			for v := range data {
+				lastId = int64(v.Id)
+				newData = true
+				err = enc.Encode(&v)
 				if err != nil {
-					printf("error reading data from database: %v", err)
+					printf("error encoding data to client: %v", err)
 					return
 				}
-				for v := range data {
-					lastId = int64(v.Id)
-					newData = true
-					err = enc.Encode(&v)
-					if err != nil {
-						printf("error encoding data to client: %v", err)
-						return
-					}
-					fmt.Fprintf(conn, "\r\n")
-				}
-				if !newData {
-					backtime = backtime + 10
-					if backtime > 300 {
-						backtime = 300
-					}
-					printf("no more data to stream, wait a few seconds")
-					<-time.After(time.Minute + (time.Second * time.Duration(backtime)))
-				} else {
-					backtime = 0
-				}
-				newData = false
+				fmt.Fprintf(conn, "\r\n")
 			}
-		}*/
+			if !newData {
+				backtime = backtime + 10
+				if backtime > 300 {
+					backtime = 300
+				}
+				printf("no more data to stream, wait a few seconds")
+				<-time.After(time.Minute + (time.Second * time.Duration(backtime)))
+			} else {
+				values.Set("id_start", fmt.Sprintf("%v", lastId))
+				backtime = 0
+			}
+			newData = false
+		}
+	}
+	return streamBucket
 }
 
 func MakeStatsStream(db *StatsDB) websocket.Handler {
@@ -624,7 +622,7 @@ func (bh *BucketHandler) handleMergeGet(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	data, err := bh.db.FetchBucket(req.Form)
+	data, err := bh.db.FetchBucket(req.Form, -1)
 	if err != nil {
 		http.Error(w, "error fetching data from database", http.StatusInternalServerError)
 		return
@@ -653,7 +651,7 @@ func (bh *BucketHandler) handleMergeGet(w http.ResponseWriter, req *http.Request
 func (bh *BucketHandler) handleGet(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
 
-	data, err := bh.db.FetchBucket(req.Form)
+	data, err := bh.db.FetchBucket(req.Form, 0)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -708,16 +706,33 @@ func setupDatabase() (*StatsDB, error) {
 	}
 }
 
+func AllowAnyOrigin(h websocket.Handler) http.Handler {
+	return &websocket.Server{
+		Handler:   h,
+		Handshake: allowAnyOriginHandshake,
+	}
+}
+
+func allowAnyOriginHandshake(cfg *websocket.Config, req *http.Request) error {
+	var err error
+	cfg.Origin, err = websocket.Origin(cfg, req)
+	cfg.Header = make(http.Header)
+	cfg.Header.Set("Access-Control-Allow-Origin", "*")
+	printf("allowAnyOriginHandshake err: %v", err)
+	return err
+}
+
 func setupHttp() error {
 	if statsdb, err := NewStatsDB(*dbuser, *dbpasswd, *dbhost, *dbname); err != nil {
 		return err
 	} else {
 		handler := NewStatsHandler(statsdb)
 		http.Handle("/stats/", handler)
-		http.Handle("/stats/stream", MakeStatsStream(statsdb))
+		http.Handle("/stats/stream", AllowAnyOrigin(MakeStatsStream(statsdb)))
 
 		bucketHandler := NewBucketHandler(statsdb)
 		http.Handle("/buckets/", bucketHandler)
+		http.Handle("/buckets/stream", AllowAnyOrigin(MakeBucketStream(statsdb)))
 		return nil
 	}
 	panic("not reached")
