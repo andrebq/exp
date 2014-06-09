@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"net/url"
 	"os"
 	"reflect"
 	"strconv"
@@ -25,10 +26,11 @@ const (
 	MaxSize     = 1000
 
 	DateTimeFormatFromServer = "2006-01-02 15:04:05.000"
-	StatsSelect              = `select s.id, s.system, s.subsystem, s.message, s.context, to_char(s.servertime, 'yyyy-mm-dd HH24:MI:SS:MS'), s.clienttime, s.error, si.info from stats s inner join stats_info si on s.id = si.stats_id `
-	BucketSelect             = `select b.id, to_char(b.servertime, 'yyyy-mm-dd HH24:MI:SS:MS'), b.bucket, b.info from buckets b where deleted = 'f' `
+	StatsSelect              = `select s.id, s.system, s.subsystem, s.message, s.context, to_char(s.servertime, 'yyyy-mm-dd HH24:MI:SS.MS'), s.clienttime, s.error, si.info from stats s inner join stats_info si on s.id = si.stats_id `
+	BucketSelect             = `select b.id, to_char(b.servertime, 'yyyy-mm-dd HH24:MI:SS.MS'), b.bucket, b.info from buckets b where deleted = 'f' `
 	EntriesInBucketSelect    = `select count(*) from buckets b where deleted = 'f'`
 	DeleteBucketSelect       = `update buckets set deleted = true where bucket = $1`
+	DeleteBucketEntrySelect  = `update buckets set deleted = true where id = $1`
 )
 
 var (
@@ -224,7 +226,7 @@ func (db *StatsDB) FetchAfterId(lastId, size int) (chan Stats, error) {
 }
 
 func (db *StatsDB) Fetch(size int) (<-chan Stats, error) {
-	result, err := db.conn.Query(StatsSelect+" order by s.context, s.servertime desc limit $1", size)
+	result, err := db.conn.Query(StatsSelect+" order by s.servertime desc, s.context limit $1", size)
 	if err != nil {
 		printf("error running query: %v", err)
 		return nil, err
@@ -234,10 +236,60 @@ func (db *StatsDB) Fetch(size int) (<-chan Stats, error) {
 	return out, err
 }
 
-func (db *StatsDB) FetchBucket(bucket string) (<-chan Bucket, error) {
-	result, err := db.conn.Query(BucketSelect+" and b.bucket = $1 order by b.servertime asc", bucket)
+func (db *StatsDB) FetchBucket(args url.Values) (<-chan Bucket, error) {
+	query := &bytes.Buffer{}
+	var queryArgs []interface{}
+	fmt.Fprintf(query, BucketSelect)
+	if val, has := args["prefix"]; has {
+		fmt.Fprintf(query, " AND ( ")
+		first := true
+		for _, name := range val {
+			if !first {
+				fmt.Fprintf(query, " OR ")
+			}
+			fmt.Fprintf(query, " b.bucket like $%v ", len(queryArgs)+1)
+			queryArgs = append(queryArgs, name+"%")
+		}
+		fmt.Fprintf(query, ") ")
+	} else {
+		fmt.Fprintf(query, " and b.bucket = $%v ", len(queryArgs)+1)
+		queryArgs = append(queryArgs, args.Get("bucket"))
+	}
+
+	if len(args.Get("id_start")) > 0 {
+		fmt.Fprintf(query, " and b.id > $%v", len(queryArgs)+1)
+		queryArgs = append(queryArgs, args.Get("id_start"))
+	}
+
+	if len(args.Get("id_end")) > 0 {
+		fmt.Fprintf(query, " and b.id <= $%v", len(queryArgs)+1)
+		queryArgs = append(queryArgs, args.Get("id_end"))
+	}
+
+	if len(args.Get("time_start")) > 0 {
+		time, err := time.Parse(DateTimeFormatFromServer, args.Get("time_start"))
+		if err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(query, " and b.servertime > $%v", len(queryArgs)+1)
+		queryArgs = append(queryArgs, time)
+	}
+
+	if len(args.Get("time_end")) > 0 {
+		time, err := time.Parse(DateTimeFormatFromServer, args.Get("time_end"))
+		if err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(query, " and b.servertime <= $%v", len(queryArgs)+1)
+		queryArgs = append(queryArgs, time)
+	}
+
+	fmt.Fprintf(query, " order by b.servertime asc")
+
+	result, err := db.conn.Query(string(query.Bytes()), queryArgs...)
+
 	if err != nil {
-		printf("error running query: %v", err)
+		printf("error running query: query: [%v] params: [%v] cause: %v", string(query.Bytes()), queryArgs, err)
 		return nil, err
 	}
 	out := make(chan Bucket, 0)
@@ -254,8 +306,13 @@ func (db *StatsDB) EntriesInBucket(bucket string) (int, error) {
 	return out, err
 }
 
-func (db *StatsDB) DeleteBucketEntries(bucket string) error {
+func (db *StatsDB) DeleteBucket(bucket string) error {
 	_, err := db.conn.Exec(DeleteBucketSelect, bucket)
+	return err
+}
+
+func (db *StatsDB) DeleteBucketEntry(id int64) error {
+	_, err := db.conn.Exec(DeleteBucketEntrySelect, id)
 	return err
 }
 
@@ -520,7 +577,7 @@ func (bh *BucketHandler) handleDelete(w http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	err := bh.db.DeleteBucketEntries(val)
+	err := bh.db.DeleteBucket(val)
 	if err != nil {
 		http.Error(w, "error deleting bucket", http.StatusInternalServerError)
 		return
@@ -567,7 +624,7 @@ func (bh *BucketHandler) handleMergeGet(w http.ResponseWriter, req *http.Request
 		return
 	}
 
-	data, err := bh.db.FetchBucket(req.Form.Get("bucket"))
+	data, err := bh.db.FetchBucket(req.Form)
 	if err != nil {
 		http.Error(w, "error fetching data from database", http.StatusInternalServerError)
 		return
@@ -584,6 +641,7 @@ func (bh *BucketHandler) handleMergeGet(w http.ResponseWriter, req *http.Request
 	for s := range data {
 		ret.Id = s.Id
 		ret.ServerTime = s.ServerTime
+		ret.Bucket = s.Bucket
 		ret.MergeWith(&s)
 	}
 	err = enc.Encode(ret)
@@ -600,9 +658,9 @@ func (bh *BucketHandler) handleGet(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	data, err := bh.db.FetchBucket(req.Form.Get("bucket"))
+	data, err := bh.db.FetchBucket(req.Form)
 	if err != nil {
-		http.Error(w, "error fetching data from database", http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
