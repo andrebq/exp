@@ -653,11 +653,6 @@ func (bh *BucketHandler) handleMergeGet(w http.ResponseWriter, req *http.Request
 func (bh *BucketHandler) handleGet(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
 
-	if len(req.Form.Get("bucket")) == 0 {
-		http.Error(w, "missing required parameter bucket", http.StatusBadRequest)
-		return
-	}
-
 	data, err := bh.db.FetchBucket(req.Form)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
