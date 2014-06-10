@@ -286,10 +286,14 @@ func (db *StatsDB) FetchBucket(args url.Values, maxSize int) (<-chan Bucket, err
 
 	fmt.Fprintf(query, " order by b.servertime asc ")
 
-	if maxSize > 0 {
-		fmt.Fprintf(query, " limit $%v", len(queryArgs)+1)
-		queryArgs = append(queryArgs, maxSize)
+	if maxSize > 500 {
+		maxSize = 500
+	} else if maxSize <= 0 {
+		maxSize = 100
 	}
+
+	fmt.Fprintf(query, " limit $%v", len(queryArgs)+1)
+	queryArgs = append(queryArgs, maxSize)
 
 	result, err := db.conn.Query(string(query.Bytes()), queryArgs...)
 
