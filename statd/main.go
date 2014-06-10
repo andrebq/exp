@@ -284,7 +284,20 @@ func (db *StatsDB) FetchBucket(args url.Values, maxSize int) (<-chan Bucket, err
 		queryArgs = append(queryArgs, time)
 	}
 
-	fmt.Fprintf(query, " order by b.servertime asc ")
+	if args.Get("sort") == "desc" {
+		fmt.Fprintf(query, " order by b.servertime desc ")
+	} else {
+		fmt.Fprintf(query, " order by b.servertime asc ")
+	}
+
+	if args.Get("pagesize") != "" {
+		var pagesize int64
+		var err error
+		if pagesize, err = strconv.ParseInt(args.Get("pagesize"), 10, 32); err != nil {
+			pagesize = 0
+		}
+		maxSize = int(pagesize)
+	}
 
 	if maxSize > 500 {
 		maxSize = 500
