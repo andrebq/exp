@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -14,7 +15,7 @@ import (
 var (
 	bucketServer = flag.String("host", "http://localhost:4001/buckets", "Host to store the bucket")
 	bucketName   = flag.String("b", "", "Bucket name")
-	doGet        = flag.Bool("get", false, "Should make a GET instead of POST")
+	doPost        = flag.Bool("post", false, "Should make a GET instead of POST")
 	doDelete     = flag.Bool("delete", false, "Remove the data from the server")
 	help         = flag.Bool("h", false, "Help")
 )
@@ -26,15 +27,14 @@ func main() {
 		return
 	}
 
-	if len(*bucketName) == 0 {
+	if len(*bucketName) == 0 && (*doPost || *doDelete) {
 		log.Printf("Invalid bucket name")
 		flag.Usage()
 		return
 	}
 
-	if *doGet {
-		log.Printf("GET isn't implemented")
-		flag.Usage()
+	if *doPost {
+		cmdPost()
 		return
 	}
 
@@ -43,11 +43,50 @@ func main() {
 		return
 	}
 
-	cmdPost()
+	cmdGet()
+
+}
+
+func cmdGet() {
+	target, err := url.Parse(*bucketServer)
+	if err != nil {
+		log.Printf("unable to parse url: %v", err)
+		return
+	}
+
+	if len(*bucketName) > 0 {
+		params := make(url.Values)
+		params.Add("bucket", *bucketName)
+		target.RawQuery = params.Encode()
+	}
+
+	urlStr := target.String()
+	log.Printf("url: %v", urlStr)
+	if req, err := http.NewRequest("GET", urlStr, nil); err != nil {
+		log.Printf("Error preparing the request: %v", err)
+		return
+	} else {
+		if res, err := http.DefaultClient.Do(req); err != nil {
+			log.Printf("Error sending bucket to server: %v", err)
+			return
+		} else {
+			defer res.Body.Close()
+			if res.StatusCode != 200 {
+				log.Printf("invalid status code. expecting 200 got %v", res.StatusCode)
+				data, _ := ioutil.ReadAll(res.Body)
+				log.Printf(string(data))
+			} else {
+				_, err := io.Copy(os.Stdout, res.Body)
+				if err != nil {
+					log.Printf("error: %v", err)
+				}
+			}
+		}
+	}
 }
 
 func cmdDelete() {
-	target, err := url.Parse(*bucketServer + "/")
+	target, err := url.Parse(*bucketServer)
 	if err != nil {
 		log.Printf("unable to parse url: %v", err)
 		return
