@@ -744,12 +744,12 @@ func setupHttp() error {
 		return err
 	} else {
 		handler := NewStatsHandler(statsdb)
-		http.Handle("/stats/", handler)
 		http.Handle("/stats/stream", AllowAnyOrigin(MakeStatsStream(statsdb)))
+		http.Handle("/stats", handler)
 
 		bucketHandler := NewBucketHandler(statsdb)
-		http.Handle("/buckets/", bucketHandler)
 		http.Handle("/buckets/stream", AllowAnyOrigin(MakeBucketStream(statsdb)))
+		http.Handle("/buckets", bucketHandler)
 		return nil
 	}
 	panic("not reached")
