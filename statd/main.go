@@ -745,10 +745,12 @@ func setupHttp() error {
 	} else {
 		handler := NewStatsHandler(statsdb)
 		http.Handle("/stats/stream", AllowAnyOrigin(MakeStatsStream(statsdb)))
+		http.Handle("/stats/new", handler)
 		http.Handle("/stats", handler)
 
 		bucketHandler := NewBucketHandler(statsdb)
 		http.Handle("/buckets/stream", AllowAnyOrigin(MakeBucketStream(statsdb)))
+		http.Handle("/buckets/new", bucketHandler)
 		http.Handle("/buckets", bucketHandler)
 		return nil
 	}
