@@ -361,7 +361,7 @@ func (db *StatsDB) CreateTables() error {
 		`create sequence buckets_seq increment 1 minvalue 1 maxvalue 9223372036854775807 start 1 cache 1`,
 		`create table stats(id integer not null default nextval('stats_seq'), system char varying(255) not null, subsystem char varying(255), message char varying(255), context char varying(255), servertime timestamp not null, clienttime char varying(100), error boolean)`,
 		`create table stats_info(id integer not null default nextval('stats_info_seq'), stats_id integer, info text)`,
-		`create table buckets(id integer not null default nextval('buckets_seq'), bucket varchar(255), servertime timestamp not null, deleted boolean not null default 'f', info char varying(1024))`,
+		`create table buckets(id integer not null default nextval('buckets_seq'), bucket varchar(255), servertime timestamp not null, deleted boolean not null default 'f', info char text)`,
 	}
 	var firsterr error
 	for _, cmd := range cmds {
@@ -751,6 +751,8 @@ func setupHttp() error {
 		bucketHandler := NewBucketHandler(statsdb)
 		http.Handle("/buckets/stream", AllowAnyOrigin(MakeBucketStream(statsdb)))
 		http.Handle("/buckets/new", bucketHandler)
+		http.Handle("/buckets/merge", bucketHandler)
+		http.Handle("/buckets/count", bucketHandler)
 		http.Handle("/buckets", bucketHandler)
 		return nil
 	}
