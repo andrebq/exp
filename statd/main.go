@@ -266,21 +266,35 @@ func (db *StatsDB) FetchBucket(args url.Values, maxSize int) (<-chan Bucket, err
 	}
 
 	if len(args.Get("time_start")) > 0 {
-		time, err := time.Parse(DateTimeFormatFromServer, args.Get("time_start"))
+		val, err := time.Parse(DateTimeFormatFromServer, args.Get("time_start"))
 		if err != nil {
-			return nil, err
+			// not a time, maybe a duration
+			var dur time.Duration
+			dur, err = time.ParseDuration(args.Get("time_start"))
+			if err != nil {
+				return nil, fmt.Errorf("%v isn't a valid date or valid duration", args.Get("time_start"))
+			}
+			val = time.Now()
+			val = val.Add(dur)
 		}
 		fmt.Fprintf(query, " and b.servertime > $%v", len(queryArgs)+1)
-		queryArgs = append(queryArgs, time)
+		queryArgs = append(queryArgs, val)
 	}
 
 	if len(args.Get("time_end")) > 0 {
-		time, err := time.Parse(DateTimeFormatFromServer, args.Get("time_end"))
+		val, err := time.Parse(DateTimeFormatFromServer, args.Get("time_end"))
 		if err != nil {
-			return nil, err
+			// not a time, maybe a duration
+			var dur time.Duration
+			dur, err = time.ParseDuration(args.Get("time_end"))
+			if err != nil {
+				return nil, fmt.Errorf("%v isn't a valid date or valid duration", args.Get("time_end"))
+			}
+			val = time.Now()
+			val = val.Add(dur)
 		}
 		fmt.Fprintf(query, " and b.servertime <= $%v", len(queryArgs)+1)
-		queryArgs = append(queryArgs, time)
+		queryArgs = append(queryArgs, val)
 	}
 
 	if args.Get("sort") == "desc" {
