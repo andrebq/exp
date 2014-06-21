@@ -29,7 +29,6 @@ const (
 	BucketSelect             = `select b.id, to_char(b.servertime, 'yyyy-mm-dd HH24:MI:SS.MS'), b.bucket, b.info from buckets b where deleted = 'f' `
 	EntriesInBucketSelect    = `select count(*) from buckets b where deleted = 'f'`
 	DeleteBucketSelect       = `update buckets set deleted = true where bucket = $1`
-	DeleteBucketEntrySelect  = `update buckets set deleted = true where id = $1`
 )
 
 var (
@@ -239,10 +238,10 @@ func (db *StatsDB) FetchBucket(args url.Values, maxSize int) (<-chan Bucket, err
 	query := &bytes.Buffer{}
 	var queryArgs []interface{}
 	fmt.Fprintf(query, BucketSelect)
-	if val, has := args["prefix"]; has {
+	if _, has := args["prefix"]; has {
 		fmt.Fprintf(query, " AND ( ")
 		first := true
-		for _, name := range val {
+		for _, name := range args["prefix"] {
 			if !first {
 				fmt.Fprintf(query, " OR ")
 			}
@@ -250,9 +249,32 @@ func (db *StatsDB) FetchBucket(args url.Values, maxSize int) (<-chan Bucket, err
 			queryArgs = append(queryArgs, name+"%")
 		}
 		fmt.Fprintf(query, ") ")
+	} else if _, has := args["bucket"]; has {
+		first := true
+		fmt.Fprintf(query, " and b.bucket in (")
+		for _, v := range args["bucket"] {
+			if !first {
+				fmt.Fprintf(query, " ,")
+			}
+			fmt.Fprintf(query, " $%v", len(queryArgs) + 1)
+			queryArgs = append(queryArgs, v)
+			first = false
+		}
+		fmt.Fprintf(query, " )")
+	} else if _, has := args["entryid"]; has {
+		first := true
+		fmt.Fprintf(query, " and b.id in (")
+		for _, v := range args["entryid"] {
+			if !first {
+				fmt.Fprintf(query, " ,")
+			}
+			fmt.Fprintf(query, " $%v", len(queryArgs) + 1)
+			queryArgs = append(queryArgs, v)
+			first = false
+		}
+		fmt.Fprintf(query, " )")
 	} else {
-		fmt.Fprintf(query, " and b.bucket = $%v ", len(queryArgs)+1)
-		queryArgs = append(queryArgs, args.Get("bucket"))
+		return nil, fmt.Errorf("you must provide at least one of: bucket, entryid, prefix")
 	}
 
 	if len(args.Get("id_start")) > 0 {
@@ -341,13 +363,102 @@ func (db *StatsDB) EntriesInBucket(bucket string) (int, error) {
 	return out, err
 }
 
-func (db *StatsDB) DeleteBucket(bucket string) error {
-	_, err := db.conn.Exec(DeleteBucketSelect, bucket)
+func (db *StatsDB) updateBucket(args url.Values) error {
+	query := &bytes.Buffer{}
+	var queryArgs []interface{}
+	fmt.Fprintf(query, BucketSelect)
+	if _, has := args["prefix"]; has {
+		fmt.Fprintf(query, " AND ( ")
+		first := true
+		for _, name := range args["prefix"] {
+			if !first {
+				fmt.Fprintf(query, " OR ")
+			}
+			fmt.Fprintf(query, " bucket like $%v ", len(queryArgs)+1)
+			queryArgs = append(queryArgs, name+"%")
+		}
+		fmt.Fprintf(query, ") ")
+	} else if _, has := args["bucket"]; has {
+		first := true
+		fmt.Fprintf(query, " and bucket in (")
+		for _, v := range args["bucket"] {
+			if !first {
+				fmt.Fprintf(query, " ,")
+			}
+			fmt.Fprintf(query, " $%v", len(queryArgs) + 1)
+			queryArgs = append(queryArgs, v)
+			first = false
+		}
+		fmt.Fprintf(query, " )")
+	} else if _, has := args["entryid"]; has {
+		first := true
+		fmt.Fprintf(query, " and id in (")
+		for _, v := range args["entryid"] {
+			if !first {
+				fmt.Fprintf(query, " ,")
+			}
+			fmt.Fprintf(query, " $%v", len(queryArgs) + 1)
+			queryArgs = append(queryArgs, v)
+			first = false
+		}
+		fmt.Fprintf(query, " )")
+	} else {
+		return fmt.Errorf("you must provide at least one of: bucket, entryid, prefix")
+	}
+
+	if len(args.Get("id_start")) > 0 {
+		fmt.Fprintf(query, " and id > $%v", len(queryArgs)+1)
+		queryArgs = append(queryArgs, args.Get("id_start"))
+	}
+
+	if len(args.Get("id_end")) > 0 {
+		fmt.Fprintf(query, " and id <= $%v", len(queryArgs)+1)
+		queryArgs = append(queryArgs, args.Get("id_end"))
+	}
+
+	if len(args.Get("time_start")) > 0 {
+		val, err := time.Parse(DateTimeFormatFromServer, args.Get("time_start"))
+		if err != nil {
+			// not a time, maybe a duration
+			var dur time.Duration
+			dur, err = time.ParseDuration(args.Get("time_start"))
+			if err != nil {
+				return fmt.Errorf("%v isn't a valid date or valid duration", args.Get("time_start"))
+			}
+			val = time.Now()
+			val = val.Add(dur)
+		}
+		fmt.Fprintf(query, " and servertime > $%v", len(queryArgs)+1)
+		queryArgs = append(queryArgs, val)
+	}
+
+	if len(args.Get("time_end")) > 0 {
+		val, err := time.Parse(DateTimeFormatFromServer, args.Get("time_end"))
+		if err != nil {
+			// not a time, maybe a duration
+			var dur time.Duration
+			dur, err = time.ParseDuration(args.Get("time_end"))
+			if err != nil {
+				return fmt.Errorf("%v isn't a valid date or valid duration", args.Get("time_end"))
+			}
+			val = time.Now()
+			val = val.Add(dur)
+		}
+		fmt.Fprintf(query, " and servertime <= $%v", len(queryArgs)+1)
+		queryArgs = append(queryArgs, val)
+	}
+
+	_, err := db.conn.Exec(string(query.Bytes()), queryArgs...)
+
+	if err != nil {
+		printf("error running query: query: [%v] params: [%v] cause: %v", string(query.Bytes()), queryArgs, err)
+		return err
+	}
 	return err
 }
 
-func (db *StatsDB) DeleteBucketEntry(id int64) error {
-	_, err := db.conn.Exec(DeleteBucketEntrySelect, id)
+func (db *StatsDB) DeleteBucket(bucket string) error {
+	_, err := db.conn.Exec(DeleteBucketSelect, bucket)
 	return err
 }
 
