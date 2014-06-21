@@ -263,14 +263,26 @@ type MessageContent struct {
 // is done.
 func (mc *MessageContent) Set(contents []byte) error {
 	ls := lineScan{contents, 0}
-	ls.scanUntilEmptyLine()
-	if !utf8.Valid(ls.peek()) {
-		return ErrInvalidHeaderEncoding
+	if err := mc.validContent(&ls); err != nil {
+		return err
 	}
 	mc.full = contents
 	mc.hdrs = ls.peek()
 	ls.discard()
 	mc.body = ls.data
+	return nil
+}
+
+// Return ErrInvalidHeaderEncoding if the header isn't encoded with
+// utf8.
+//
+// scanner will be placed after the headers, ie, calling scanner.peek()
+// will return the headers with the empty line and the body
+func (mc *MessageContent) validContent(scanner *lineScan) error {
+	scanner.scanUntilEmptyLine()
+	if !utf8.Valid(scanner.peek()) {
+		return ErrInvalidHeaderEncoding
+	}
 	return nil
 }
 
@@ -293,6 +305,39 @@ func (mc *MessageContent) Header(name string, out []byte) []byte {
 // Body return the
 func (mc *MessageContent) Body() []byte {
 	return mc.body
+}
+
+// WriteTo writes the message to the given writer
+func (mc *MessageContent) WriteTo(w io.Writer) (int, error) {
+	return w.Write(mc.full)
+}
+
+// Write will set the contents of the message, it will write everything or
+// nothing.
+//
+// The data is copied from msg to the message, if you don't want allocations,
+// use Set instead.
+//
+// Consecutive calls to Write will overwrite the content.
+func (mc *MessageContent) Write(msg []byte) (int, error) {
+	ls := lineScan{msg, 0}
+	if err := mc.validContent(&ls); err != nil {
+		return 0, err
+	}
+	mc.Set(copyBuf(nil, msg))
+	return len(msg), nil
+}
+
+// Read copy the contents of the message to the given buffer,
+// if there isn't enough space in out, a short read error is returned.
+//
+// Calling Read two times will write the entire message two times or return an error
+// two times.
+func (mc *MessageContent) Read(out []byte) (int, error) {
+	if len(out) < len(mc.full) {
+		return 0, io.ErrShortBuffer
+	}
+	return copy(out, mc.full), nil
 }
 
 // Message holds the body of the message and extra headers
