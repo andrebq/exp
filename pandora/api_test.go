@@ -57,27 +57,3 @@ func TestKeyPrinterRead(t *testing.T) {
 		t.Errorf("error reading key. expected value is %v got %v", buf, key.Bytes())
 	}
 }
-
-func TestLineMessageContent(t *testing.T) {
-	// this is a valid message, made with valid utf-8 headers
-	// a empty line
-	// and a body
-	mc := MessageContent{}
-	mc.Set([]byte("Header1: ValueHeader1\r\nHeader2: ValueHeader2\n\nthis is the body\nwith a new line"))
-
-	hdr1 := mc.Header("Header1", nil)
-	hdr2 := mc.Header("Header2", nil)
-	body := mc.Body()
-
-	if !bytes.Equal([]byte("ValueHeader1"), hdr1) {
-		t.Errorf("unable to reader value header 1. got: %v", string(hdr1))
-	}
-
-	if !bytes.Equal([]byte("ValueHeader2"), hdr2) {
-		t.Errorf("unable to reader value header 2. got: %v", string(hdr2))
-	}
-
-	if !bytes.Equal([]byte("this is the body\nwith a new line"), body) {
-		t.Errorf("unable to reader value body. got: %v", string(body))
-	}
-}

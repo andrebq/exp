@@ -6,13 +6,8 @@ import (
 	"encoding/hex"
 	"hash"
 	"io"
-	"regexp"
+	"net/url"
 	"time"
-	"unicode/utf8"
-)
-
-var (
-	lineRegexp = regexp.MustCompile("[^\r\n]*\r?\n")
 )
 
 // ApiError is used to define the possible error types
@@ -24,6 +19,8 @@ func (ae ApiError) Error() string {
 }
 
 const (
+	// MaxSize define the max size that any message can have
+	MaxSize = 4096
 	// Key is too short to be used by the given function
 	ErrKeyTooShort = ApiError("key is too short")
 
@@ -32,6 +29,15 @@ const (
 
 	// Header isn't a valid utf8 string
 	ErrInvalidHeaderEncoding = ApiError("header should be a valid utf-8")
+
+	// ErrMessageToBig the message data is larger than MaxSize
+	ErrMessageToBig = ApiError("message is too big. max size is " + string(MaxSize))
+
+	// ErrNilBody the body passed is nil
+	ErrNilBody = ApiError("body is nil")
+
+	// DefaultLeaseTime is 5 minutes
+	DefaultLeaseTime = time.Minute * 5
 )
 
 // KeyPrinter is used to print any key to a human readable format,
@@ -154,20 +160,33 @@ type BlobStore interface {
 	UpdateRefCount(key Key, delta int) error
 }
 
-// MessageHeader is the header used to index the message
-type MessageHeader struct {
-	// Id of the message, calculated based on the
-	// MessageContent
-	Id Key
-	// SendAt holds the client time when the message was sent
+// Message is the header used to index the message
+type Message struct {
+	// Mid is the id of the message, calculated based on the
+	// body of the message
+	Mid Key
+	// Lid is the id of the current associated lock
+	Lid Key
+	// LeaseUntil holds the time when the Lid will become invalid
+	LeasedUntil time.Time
+	// FetchTime holds the time at the server when the message was requested by the client.
+	FetchTime time.Time
+	// ReceivedAt holds the server time when the message was received
 	ReceivedAt time.Time
-	// ServerTime holds the time of the server when the message was sent
-	SendTime time.Time
+	// SendWhen is used to store when the message should be delivered. This is the ReceivedAt + Delay
+	SendWhen time.Time
+	// Delay is the time to wait before sending the message
+	Delay time.Duration
+	// ClientTime is the time informed by the client, this is just a informative field and the server
+	// can safely ignore this.
+	ClientTime time.Time
 	// DeliveryCount count how many times the message were delivered to a client.
 	//
 	// Only one client can access the message at any given time, but when the client crashes
 	// or don't complete the message, then another client might access the message.
 	DeliveryCount int
+	// Body is a list of urlencoded data
+	Body url.Values
 }
 
 func bufOfSize(in []byte, sz int) []byte {
@@ -182,168 +201,6 @@ func copyBuf(out []byte, in []byte) []byte {
 	out = bufOfSize(out, len(in))
 	copy(out, in)
 	return out
-}
-
-type lineScan struct {
-	data []byte
-	sz   int
-}
-
-// scanUntilEmptyLine will read data until a empty line is found
-//
-// an empty line is just a line that have the '\n|\r\n' on the first position
-func (ls *lineScan) scanUntilEmptyLine() bool {
-	for ls.scanLine(false) {
-		// consume all lines until we have a negative
-	}
-	// consume the next line that should be an empty line
-	ret := ls.scanLine(true)
-	return ret
-}
-
-func (ls *lineScan) scanLine(allowEmpty bool) bool {
-	if ls.eof() {
-		return false
-	}
-	buf := ls.data[ls.sz:]
-	found := lineRegexp.Find(buf)
-	trimmed := bytes.Trim(found, "\r\n")
-	if len(trimmed) == 0 {
-		if allowEmpty {
-			ls.sz += len(found)
-			// consume the newline
-			return true
-		}
-		return false
-	}
-	ls.sz += len(found)
-	return true
-}
-
-func (ls *lineScan) peek() []byte {
-	return ls.data[:ls.sz]
-}
-
-func (ls *lineScan) discard() {
-	ls.data = ls.data[ls.sz:]
-	ls.sz = 0
-}
-
-func (ls *lineScan) read(out []byte) []byte {
-	out = bufOfSize(out, ls.sz)
-	copy(out, ls.data[:ls.sz])
-	ls.data = ls.data[ls.sz:]
-	ls.sz = 0
-	return out
-}
-
-func (ls *lineScan) eol() bool {
-	buf := ls.data[ls.sz:]
-	found := lineRegexp.Find(buf)
-	trimmed := bytes.Trim(found, "\r\n")
-	return len(trimmed) == 0
-}
-
-func (ls *lineScan) eof() bool {
-	return ls.sz >= len(ls.data)
-}
-
-// MessageContent holds the body of the message
-type MessageContent struct {
-	full []byte
-	hdrs []byte
-	body []byte
-}
-
-// Set can be used to update the contents of the message,
-// the only validation here is to ensure that the headers inside
-// contents are utf8 encoded.
-//
-// The body of the message is just a raw array of bytes and no validation
-// is done.
-func (mc *MessageContent) Set(contents []byte) error {
-	ls := lineScan{contents, 0}
-	if err := mc.validContent(&ls); err != nil {
-		return err
-	}
-	mc.full = contents
-	mc.hdrs = ls.peek()
-	ls.discard()
-	mc.body = ls.data
-	return nil
-}
-
-// Return ErrInvalidHeaderEncoding if the header isn't encoded with
-// utf8.
-//
-// scanner will be placed after the headers, ie, calling scanner.peek()
-// will return the headers with the empty line and the body
-func (mc *MessageContent) validContent(scanner *lineScan) error {
-	scanner.scanUntilEmptyLine()
-	if !utf8.Valid(scanner.peek()) {
-		return ErrInvalidHeaderEncoding
-	}
-	return nil
-}
-
-// Header search for the given header inside the MessageBody.
-//
-// If the header is found then the header value is copied to out
-func (mc *MessageContent) Header(name string, out []byte) []byte {
-	nameB := []byte(name)
-	ls := lineScan{mc.hdrs, 0}
-	for ls.scanLine(false) {
-		parts := bytes.Split(ls.peek(), []byte(":"))
-		if bytes.Equal(parts[0], nameB) {
-			return copyBuf(out, bytes.Trim(parts[1], " \r\n"))
-		}
-		ls.discard()
-	}
-	return nil
-}
-
-// Body return the
-func (mc *MessageContent) Body() []byte {
-	return mc.body
-}
-
-// WriteTo writes the message to the given writer
-func (mc *MessageContent) WriteTo(w io.Writer) (int, error) {
-	return w.Write(mc.full)
-}
-
-// Write will set the contents of the message, it will write everything or
-// nothing.
-//
-// The data is copied from msg to the message, if you don't want allocations,
-// use Set instead.
-//
-// Consecutive calls to Write will overwrite the content.
-func (mc *MessageContent) Write(msg []byte) (int, error) {
-	ls := lineScan{msg, 0}
-	if err := mc.validContent(&ls); err != nil {
-		return 0, err
-	}
-	mc.Set(copyBuf(nil, msg))
-	return len(msg), nil
-}
-
-// Read copy the contents of the message to the given buffer,
-// if there isn't enough space in out, a short read error is returned.
-//
-// Calling Read two times will write the entire message two times or return an error
-// two times.
-func (mc *MessageContent) Read(out []byte) (int, error) {
-	if len(out) < len(mc.full) {
-		return 0, io.ErrShortBuffer
-	}
-	return copy(out, mc.full), nil
-}
-
-// Message holds the body of the message and extra headers
-type Message struct {
-	MessageHeader
-	MessageContent
 }
 
 // SHA1Key store a sha1 hash as the key
@@ -380,4 +237,102 @@ func (s *SHA1KeyWriter) Key() Key {
 		copy(s.k.Bytes(), s.h.Sum(nil))
 	}
 	return &(s.k)
+}
+
+// AckStatus define the list of possible status for a given message'
+type AckStatus byte
+
+const (
+	// StatusConfirmed means that a message was received and processed
+	StatusConfirmed = AckStatus(1)
+	// StatusRejected means that a message was received but rejected by the client
+	StatusRejected = AckStatus(2)
+	// StatusTimeout means that a message was sent but the client didn't sent a valid Ack
+	StatusTimeout = AckStatus(4)
+	// StatusNotDelivered means that a message is waiting for delivery on the queue
+	StatusNotDelivered = AckStatus(8)
+)
+
+// MessageStore defines the required interface to allow the system to work
+type MessageStore interface {
+	// Enqueue will put msg in the outputbox of the receiver
+	Enqueue(msg *Message) error
+
+	// FetchAndLockLatest will fetch the next pending queue that is available for delivery, ie,
+	// messages that aren't locked and the SendWhen is less than the current time.
+	//
+	// This also returns the Lid to be used with the message
+	FetchAndLockLatest(receiver string, leaseTime time.Duration) (*Message, error)
+
+	// Ack will change the status of the given mid message, only if lid is still valid
+	Ack(mid, lid Key, status AckStatus) error
+}
+
+// Server implements the pandora message API
+type Server struct {
+	blobStore    BlobStore
+	messageStore MessageStore
+}
+
+// WriteBlob save the body of the message to the blobstore and writes
+// the value back to msg.Mid
+func (s *Server) WriteBlob(msg *Message) error {
+	buf := &bytes.Buffer{}
+	io.WriteString(buf, msg.Body.Encode())
+	_, err := s.blobStore.PutData(msg.Mid, buf.Bytes())
+	return err
+}
+
+// Send is used to send the givem message contents from sender to receiver,
+// sendAt can be used to inform a duration and delay the actual delivery of the message.
+//
+// delay will always be calculated by the server time.
+//
+// The message body might be changed by the server by adding headers to it
+func (s *Server) Send(sender, receiver string, delay time.Duration, clientTime time.Time, body url.Values) (Message, error) {
+	var msg Message
+	if body == nil {
+		return msg, ErrNilBody
+	}
+	msg.Body = body
+	msg.Body.Set("p-sender", sender)
+	msg.Body.Set("p-seceiver", receiver)
+	msg.Body.Add("p-server", "Pandora-Default-Server")
+
+	msg.ReceivedAt = time.Now()
+	msg.SendWhen = msg.ReceivedAt.Add(delay)
+	msg.ClientTime = clientTime
+	msg.DeliveryCount = 0
+
+	err := s.doSend(&msg)
+	return msg, err
+}
+
+// FetchLatest fetch the latest message for the given receiver
+func (s *Server) FetchLatest(receiver string, lease time.Duration) (*Message, error) {
+	if lease <= 0 {
+		lease = DefaultLeaseTime
+	}
+	msg, err := s.messageStore.FetchAndLockLatest(receiver, lease)
+	if err != nil {
+		return nil, err
+	}
+	return msg, err
+}
+
+func (s *Server) doSend(msg *Message) error {
+	if err := s.WriteBlob(msg); err != nil {
+		return err
+	}
+	return s.messageStore.Enqueue(msg)
+}
+
+// Lock should be used to lock a message and prevent anybody from reading that message in the meantime.
+func (s *Server) Lock(lockId, mid Key) (Key, error) {
+	return lockId, ApiError("not implemented")
+}
+
+// Ack is used to confirm that a message mid was processed o rejected by the client.
+func (s *Server) Ack(mid, lockId Key, ack AckStatus) error {
+	return ApiError("not implemented")
 }
