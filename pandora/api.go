@@ -1,12 +1,34 @@
 package pandora
 
+// Copyright (c) 2014 André Luiz Alves Moraes
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
+	"fmt"
 	"hash"
 	"io"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -36,7 +58,33 @@ const (
 	// ErrNilBody the body passed is nil
 	ErrNilBody = ApiError("body is nil")
 
+	// ErrInvalidHeaderEncoding means that a mailbox (sender or receiver) is invalid
+	ErrInvalidMailBox = ApiError("invalid mailbox")
+
+	// The sender wasn't found on the server
+	ErrSenderNotFound = ApiError("sender not found")
+
+	// The receiver wasn't found on the server
+	ErrReceiverNotFound = ApiError("receiver not found")
+
+	// Unable to change the status
+	ErrUnableToChangeStatus = ApiError("unable to change status")
+
+	// Body field used to store the sender
+	KeySender = "sender"
+
+	// Body field used to store the receiver
+	KeyReceiver = "receiver"
+
+	// Body field used to store the client time
+	KeyClientTime = "clientTime"
+
+	// Key used by the client to inform for how long it
+	// want to keep the message locked
+	KeyLeaseTime = "leaseTime"
+
 	// DefaultLeaseTime is 5 minutes
+
 	DefaultLeaseTime = time.Minute * 5
 )
 
@@ -167,6 +215,8 @@ type Message struct {
 	Mid Key
 	// Lid is the id of the current associated lock
 	Lid Key
+	// Status holds the ack status of this message
+	Status AckStatus
 	// LeaseUntil holds the time when the Lid will become invalid
 	LeasedUntil time.Time
 	// FetchTime holds the time at the server when the message was requested by the client.
@@ -177,9 +227,6 @@ type Message struct {
 	SendWhen time.Time
 	// Delay is the time to wait before sending the message
 	Delay time.Duration
-	// ClientTime is the time informed by the client, this is just a informative field and the server
-	// can safely ignore this.
-	ClientTime time.Time
 	// DeliveryCount count how many times the message were delivered to a client.
 	//
 	// Only one client can access the message at any given time, but when the client crashes
@@ -187,6 +234,106 @@ type Message struct {
 	DeliveryCount int
 	// Body is a list of urlencoded data
 	Body url.Values
+
+	invalidBody bool
+}
+
+func (m *Message) ensureBody() {
+	if m.Body == nil {
+		m.Body = make(url.Values)
+	}
+}
+
+func (m *Message) ValidBody() bool {
+	return !m.invalidBody
+}
+
+func (m *Message) Sender() string {
+	m.ensureBody()
+	return m.Body.Get(KeySender)
+}
+
+func (m *Message) Receiver() string {
+	m.ensureBody()
+	return m.Body.Get(KeyReceiver)
+}
+
+func (m *Message) SetSender(sender string) {
+	m.ensureBody()
+	m.Body.Set(KeySender, sender)
+}
+
+func (m *Message) SetReceiver(recv string) {
+	m.ensureBody()
+	m.Body.Set(KeyReceiver, recv)
+}
+
+func (m *Message) SetClientTime(ct time.Time) {
+	m.ensureBody()
+	m.Body.Set(KeyClientTime, ct.Format(time.RFC3339Nano))
+}
+
+func (m *Message) ClientTime() time.Time {
+	m.ensureBody()
+	t, _ := time.Parse(time.RFC3339Nano, m.Body.Get(KeyClientTime))
+	return t
+}
+
+func (m *Message) Set(key, value string) {
+	m.ensureBody()
+	m.Body.Set(key, value)
+}
+
+func (m *Message) Get(key string) string {
+	m.ensureBody()
+	return m.Body.Get(key)
+}
+
+func (m *Message) CalcualteLeaseFor(now time.Time, lease time.Duration) {
+	var kw SHA1KeyWriter
+	m.LeasedUntil = now.Add(lease)
+	io.WriteString(&kw, m.LeasedUntil.Format(time.RFC3339Nano))
+	m.Lid = kw.Key()
+}
+
+func (m *Message) WriteTo(out url.Values) {
+	var kp KeyPrinter
+	out.Set("mid", kp.PrintString(m.Mid))
+	out.Set("lid", kp.PrintString(m.Lid))
+	out.Set("statusCode", strconv.FormatInt(int64(m.Status), 10))
+	out.Set("status", m.Status.String())
+	out.Set("leasedUntil", m.LeasedUntil.Format(time.RFC3339Nano))
+	out.Set("receivedAt", m.ReceivedAt.Format(time.RFC3339Nano))
+	out.Set("deliveryCount", strconv.FormatInt(int64(m.DeliveryCount), 10))
+	out.Set("validBody", fmt.Sprintf("%v", m.ValidBody()))
+}
+
+// Empty will clean all fields of this message and mark the message as
+// if it was sent now
+//
+// No sender or receiver is configured
+func (m *Message) Empty(body url.Values) *Message {
+	m.Body = body
+	if m.Body == nil {
+		m.Body = make(url.Values)
+	}
+	m.SetClientTime(time.Now())
+	m.ReceivedAt = m.ClientTime()
+	m.SendWhen = m.ClientTime()
+	m.DeliveryCount = 0
+	m.Delay = 0
+	m.Lid = nil
+	m.Status = StatusNotDelivered
+	m.LeasedUntil = time.Time{}
+	return m
+}
+
+func (m *Message) CalculateMid() {
+	var kw SHA1KeyWriter
+	buf := bytes.Buffer{}
+	io.WriteString(&buf, m.Body.Encode())
+	kw.Write(buf.Bytes())
+	m.Mid = kw.Key()
 }
 
 func bufOfSize(in []byte, sz int) []byte {
@@ -253,6 +400,19 @@ const (
 	StatusNotDelivered = AckStatus(8)
 )
 
+func (a AckStatus) String() string {
+	return ackStatuStr[a]
+}
+
+var (
+	ackStatuStr = map[AckStatus]string{
+		StatusConfirmed:    "confirmed",
+		StatusRejected:     "rejected",
+		StatusTimeout:      "timeout",
+		StatusNotDelivered: "notDelivered",
+	}
+)
+
 // MessageStore defines the required interface to allow the system to work
 type MessageStore interface {
 	// Enqueue will put msg in the outputbox of the receiver
@@ -270,8 +430,8 @@ type MessageStore interface {
 
 // Server implements the pandora message API
 type Server struct {
-	blobStore    BlobStore
-	messageStore MessageStore
+	BlobStore    BlobStore
+	MessageStore MessageStore
 }
 
 // WriteBlob save the body of the message to the blobstore and writes
@@ -279,7 +439,7 @@ type Server struct {
 func (s *Server) WriteBlob(msg *Message) error {
 	buf := &bytes.Buffer{}
 	io.WriteString(buf, msg.Body.Encode())
-	_, err := s.blobStore.PutData(msg.Mid, buf.Bytes())
+	_, err := s.BlobStore.PutData(msg.Mid, buf.Bytes())
 	return err
 }
 
@@ -295,27 +455,45 @@ func (s *Server) Send(sender, receiver string, delay time.Duration, clientTime t
 		return msg, ErrNilBody
 	}
 	msg.Body = body
-	msg.Body.Set("p-sender", sender)
-	msg.Body.Set("p-seceiver", receiver)
+	msg.SetSender(sender)
+	msg.SetReceiver(receiver)
 	msg.Body.Add("p-server", "Pandora-Default-Server")
 
 	msg.ReceivedAt = time.Now()
 	msg.SendWhen = msg.ReceivedAt.Add(delay)
-	msg.ClientTime = clientTime
+	msg.SetClientTime(clientTime)
 	msg.DeliveryCount = 0
 
 	err := s.doSend(&msg)
 	return msg, err
 }
 
-// FetchLatest fetch the latest message for the given receiver
+// FetchLatest fetch the latest message for the given receiver,
+// it is possible to fetch the message and not the body (BlobStore is down),
+// when that happens the client can check if the body is valid by calling
+// Message.ValidBody.
+//
+// If no error is returned, then the body is valid and there is no need to check that
 func (s *Server) FetchLatest(receiver string, lease time.Duration) (*Message, error) {
 	if lease <= 0 {
 		lease = DefaultLeaseTime
 	}
-	msg, err := s.messageStore.FetchAndLockLatest(receiver, lease)
+	msg, err := s.MessageStore.FetchAndLockLatest(receiver, lease)
 	if err != nil {
 		return nil, err
+	}
+	return s.doReadMessage(msg)
+}
+
+func (s *Server) doReadMessage(msg *Message) (*Message, error) {
+	data, err := s.BlobStore.GetData(nil, msg.Mid)
+	if err != nil {
+		msg.invalidBody = false
+		return msg, err
+	}
+	msg.Body, err = url.ParseQuery(string(data))
+	if err != nil {
+		msg.invalidBody = false
 	}
 	return msg, err
 }
@@ -324,15 +502,10 @@ func (s *Server) doSend(msg *Message) error {
 	if err := s.WriteBlob(msg); err != nil {
 		return err
 	}
-	return s.messageStore.Enqueue(msg)
-}
-
-// Lock should be used to lock a message and prevent anybody from reading that message in the meantime.
-func (s *Server) Lock(lockId, mid Key) (Key, error) {
-	return lockId, ApiError("not implemented")
+	return s.MessageStore.Enqueue(msg)
 }
 
 // Ack is used to confirm that a message mid was processed o rejected by the client.
 func (s *Server) Ack(mid, lockId Key, ack AckStatus) error {
-	return ApiError("not implemented")
+	return s.MessageStore.Ack(mid, lockId, ack)
 }
