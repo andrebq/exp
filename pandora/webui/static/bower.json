@@ -1,0 +1,22 @@
+{
+  "name": "pandora-webui",
+  "version": "0.0.1",
+  "homepage": "https://github.com/andrebq/exp",
+  "description": "Pandora Web client",
+  "main": "index.html",
+  "authors": [
+    "Andre Luiz Alves Moraes"
+  ],
+  "license": "MIT",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "angular": "1.3.0-beta.13"
+  }
+}
