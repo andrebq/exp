@@ -120,7 +120,23 @@ func (ms *MessageStore) InitTables() (err error) {
 	return
 }
 
+// take all messages that have a lease time expired and
+// remove the lock information.
+//
+// Confirmed messages aren't touched
+func reEnqueueMessages(db querier, now time.Time) error {
+	_, err := db.Exec(`update pgstore_messages
+		set lid = null, leaseuntil = null
+		where lid is not null and leaseuntil < $1 and status <> $2`,
+		now, pandora.StatusConfirmed)
+	return err
+}
+
 func fetchLatestMessage(msg *pandora.Message, db querier, inbox string, now time.Time, dur time.Duration) error {
+	err := reEnqueueMessages(db, now)
+	if err != nil {
+		return err
+	}
 	inboxId, err := findInbox(db, inbox, false)
 	if err != nil {
 		return err
@@ -142,7 +158,7 @@ func fetchLatestMessage(msg *pandora.Message, db querier, inbox string, now time
 	copy(msg.Mid.Bytes(), buf)
 	msg.CalcualteLeaseFor(now, dur)
 
-	_, err = db.Exec("update pgstore_messages set lid = $1, leaseuntil = $2 where id = $3", msg.Lid.Bytes(), msg.LeasedUntil, id)
+	_, err = db.Exec("update pgstore_messages set lid = $1, deliverycount = deliverycount + 1, leaseuntil = $2 where id = $3", msg.Lid.Bytes(), msg.LeasedUntil, id)
 	return err
 }
 
