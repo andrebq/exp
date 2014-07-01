@@ -8,12 +8,12 @@ import (
 )
 
 type Handler struct {
-	Api    pandorahttp.PandoraHandler
+	Api    pandorahttp.Handler
 	Static http.Handler
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if strings.Index(req.URL.Path, "/api/") > 0 {
+	if strings.Index(req.URL.Path, "/api/") >= 0 {
 		h.Api.ServeHTTP(w, req)
 	} else {
 		h.Static.ServeHTTP(w, req)

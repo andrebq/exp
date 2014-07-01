@@ -42,13 +42,13 @@ var (
 	ErrServerPanic = errors.New("bad behavior from the server....")
 )
 
-// PandoraHandler is the base type used to process
+// Handler is the base type used to process
 // http request to a pandora server
-type PandoraHandler struct {
+type Handler struct {
 	Server *pandora.Server
 }
 
-func (ph *PandoraHandler) respondWith(w http.ResponseWriter, req *http.Request, val interface{}) {
+func (ph *Handler) respondWith(w http.ResponseWriter, req *http.Request, val interface{}) {
 	switch val := val.(type) {
 	case pandora.ApiError:
 		if val == ErrNotFound {
@@ -77,7 +77,7 @@ func (ph *PandoraHandler) respondWith(w http.ResponseWriter, req *http.Request, 
 }
 
 // ServeHTTP processa todas as requisições
-func (ph *PandoraHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (ph *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	var ret interface{}
 	defer func() {
 		// respond even on panic
@@ -102,7 +102,7 @@ func (ph *PandoraHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (ph *PandoraHandler) FetchAndLockLatest(req *http.Request) interface{} {
+func (ph *Handler) FetchAndLockLatest(req *http.Request) interface{} {
 	if req.Method != "POST" {
 		return ErrPOSTRequired
 	}
@@ -116,7 +116,7 @@ func (ph *PandoraHandler) FetchAndLockLatest(req *http.Request) interface{} {
 	return msg.Body
 }
 
-func (ph *PandoraHandler) Enqueue(req *http.Request) interface{} {
+func (ph *Handler) Enqueue(req *http.Request) interface{} {
 	if req.Method != "POST" {
 		return ErrPOSTRequired
 	}
@@ -142,7 +142,7 @@ func (ph *PandoraHandler) Enqueue(req *http.Request) interface{} {
 	return resp
 }
 
-func (ph *PandoraHandler) Ack(req *http.Request) interface{} {
+func (ph *Handler) Ack(req *http.Request) interface{} {
 	var kp pandora.KeyPrinter
 	var midK pandora.SHA1Key
 	var lidK pandora.SHA1Key
@@ -167,7 +167,7 @@ func (ph *PandoraHandler) Ack(req *http.Request) interface{} {
 	return http.StatusOK
 }
 
-func (ph *PandoraHandler) parseFormIfNeed(req *http.Request) error {
+func (ph *Handler) parseFormIfNeed(req *http.Request) error {
 	if len(req.Form) <= 0 {
 		return req.ParseForm()
 	}

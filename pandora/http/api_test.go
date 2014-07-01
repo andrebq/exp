@@ -53,7 +53,7 @@ func mustCreateServer() *pandora.Server {
 
 func TestPandoraAPI(t *testing.T) {
 	server := mustCreateServer()
-	handler := &PandoraHandler{
+	handler := &Handler{
 		server,
 	}
 
