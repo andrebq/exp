@@ -8,6 +8,30 @@ function PandoraCtrl($scope) {
 			initialValue: ""};
 	}
 
+	function fetchMessages() {
+		var toEncode = {
+			receiver: "b@remote",
+			receivedat: "-24h",
+		};
+		$.getJSON("/api/admin/headers", $.param(toEncode), function(result){
+			$scope.$apply(function(){
+				_.each(result, function(value){
+					$scope.msgsSent.push(mergeKeys(value));
+				});
+			});
+		});
+	}
+
+	function mergeKeys(msg) {
+		var out = {};
+		_.each(msg, function(value, key){
+			out[key] = _.reduce(value, function(acc, val) {
+				return acc += val;
+			}, "");
+		});
+		return out;
+	}
+
 	// validField returns true when fld have the required fields filled;
 	function validField(fld) {
 		return !!fld.name && !!fld.caption;
@@ -32,6 +56,7 @@ function PandoraCtrl($scope) {
 	}
 
 	$scope.newField = makeNewField();
+	$scope.msgsSent = [];
 
 	$scope.message = {
 		fields: [
@@ -61,4 +86,6 @@ function PandoraCtrl($scope) {
 		}, 'text');
 		return true;
 	};
+
+	fetchMessages();
 }

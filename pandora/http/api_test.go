@@ -54,7 +54,8 @@ func mustCreateServer() *pandora.Server {
 func TestPandoraAPI(t *testing.T) {
 	server := mustCreateServer()
 	handler := &Handler{
-		server,
+		Server:     server,
+		AllowAdmin: true,
 	}
 
 	ts := httptest.NewServer(handler)
@@ -88,6 +89,17 @@ func TestPandoraAPI(t *testing.T) {
 	}
 
 	createdMid := respValues.Get("mid")
+	respValues = make(url.Values)
+	respValues.Set("receiver", "b@local")
+	respValues.Set("receivedat", time.Now().Add(-time.Minute).Format(time.RFC3339Nano))
+
+	res, err = http.Get(ts.URL + "/admin/headers?" + respValues.Encode())
+	if err != nil {
+		t.Fatalf("error fetching headers: %v", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("expecting status %v got %v", 200, res.StatusCode)
+	}
 
 	// now, try to consume the message
 	msgToFetch := make(url.Values)

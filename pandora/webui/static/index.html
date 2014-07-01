@@ -14,6 +14,7 @@
         <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
         <script>window.jQuery || document.write('<script src="js/vendor/jquery-1.11.0.min.js"><\/script>')</script>
         <script src="bower_components/angular/angular.min.js"></script>
+        <script src="bower_components/underscore/underscore.js"></script>
         <script src="js/main.js"></script>
     </head>
     <body>
@@ -24,25 +25,32 @@
         <div class="header-container">
             <header class="wrapper clearfix">
                 <h1 class="title">Pandora WebUI</h1>
-                <nav>
-                    <ul>
-                    </ul>
-                </nav>
             </header>
         </div>
 
         <div class="main-container">
             <div class="main wrapper clearfix">
                 <article id="send-message" ng-controller="PandoraCtrl">
-                    <form ng-submit="sendMessage()">
+                    <section>
+                        <h2>Last 10 messages</h2>
                         <ul>
-                            <li ng-repeat="field in message.fields">
-                                    <div class="fieldLabel"><label>{{field.caption}}:</label></div>
-                                    <div><input type="text" name="{{field.name}}" ng-model="field.value"></div>
+                            <li ng-repeat="msg in msgsSent">
+                                <span>Mid: <a href="/api/admin/fetchBlob?mid={{ msg.mid }}">{{ msg.mid }}</a></span> / <span>Received At: {{ msg.receivedAt }}</span> / <span>Send when: {{ msg.sendWhen }}</span>
                             </li>
-                            <button type="submit">Send message</button>
                         </ul>
-                    </form>
+                    </section>
+                    <section>
+                        <h2>Send new message</h2>
+                        <form ng-submit="sendMessage()">
+                            <ul>
+                                <li ng-repeat="field in message.fields">
+                                        <div class="fieldLabel"><label>{{field.caption}}:</label></div>
+                                        <div><input type="text" name="{{field.name}}" ng-model="field.value"></div>
+                                </li>
+                                <button type="submit">Send message</button>
+                            </ul>
+                        </form>
+                    </section>
                     <section>
                         <h2>Add new field</h2>
                         <form ng-submit="addField()">

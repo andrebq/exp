@@ -92,6 +92,16 @@ func TestPandoraServer(t *testing.T) {
 		t.Errorf("mid cannot be empty or null")
 	}
 
+	// try to fetch the headers
+	var out [10]pandora.Message
+	sz, err := server.FetchHeaders(out[:], "b@remote", time.Now().Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("error fetching headers: %v", err)
+	}
+	if sz == 0 {
+		t.Errorf("error should have found at least on header. got: %v", sz)
+	}
+
 	newMsg, err := server.FetchLatest("b@remote", time.Minute*5)
 	if err != nil {
 		t.Fatalf("error fetching the message: %v", err)

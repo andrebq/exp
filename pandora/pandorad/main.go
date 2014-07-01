@@ -1,19 +1,19 @@
 package main
 
 import (
-	pandorahttp "github.com/andrebq/exp/pandora/http"
+	"flag"
 	"github.com/andrebq/exp/pandora"
+	pandorahttp "github.com/andrebq/exp/pandora/http"
 	"github.com/andrebq/exp/pandora/pgstore"
 	"github.com/andrebq/exp/pandora/webui"
-	"net/http"
-	"flag"
 	"log"
+	"net/http"
 )
 
 var (
-	addr = flag.String("addr", "0.0.0.0:4003", "Address to listen for incoming requests. Used also to serve the webui")
+	addr   = flag.String("addr", "0.0.0.0:4003", "Address to listen for incoming requests. Used also to serve the webui")
 	static = flag.String("staticDir", "!usegas", "Static directory to serve webui files. By default uses gas (requires that a valid GOPATH is set")
-	h = flag.Bool("h", false, "Help")
+	h      = flag.Bool("h", false, "Help")
 )
 
 func main() {
@@ -27,19 +27,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("error opening message store: %v", err)
 	}
-	blobStore, err := pgstore.OpenBlobStore("pandora", "pandora" ,"localhost", "pandora")
+	blobStore, err := pgstore.OpenBlobStore("pandora", "pandora", "localhost", "pandora")
 	if err != nil {
 		log.Fatalf("error opening blob store: %v", err)
 	}
 
-	server := pandora.Server {
-		BlobStore: blobStore,
+	server := pandora.Server{
+		BlobStore:    blobStore,
 		MessageStore: messageStore,
 	}
 
-	handler := &webui.Handler {
+	handler := &webui.Handler{
 		Api: pandorahttp.Handler{
-			&server,
+			Server:     &server,
+			AllowAdmin: true,
 		},
 	}
 

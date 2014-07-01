@@ -33,6 +33,7 @@ import (
 
 type querier interface {
 	QueryRow(query string, args ...interface{}) *sql.Row
+	Query(query string, args ...interface{}) (*sql.Rows, error)
 	Exec(query string, args ...interface{}) (sql.Result, error)
 }
 
@@ -132,6 +133,49 @@ func reEnqueueMessages(db querier, now time.Time) error {
 	return err
 }
 
+func fetchHeaders(out []pandora.Message, db querier, inbox string, now, min time.Time) ([]pandora.Message, error) {
+	err := reEnqueueMessages(db, now)
+	if err != nil {
+		return nil, err
+	}
+
+	inboxId, err := findInbox(db, inbox, false)
+	if err != nil {
+		return nil, err
+	}
+	results, err := db.Query(`select mid, status, receivedat, sendwhen, deliverycount
+		from pgstore_messages
+		where receiverid = $1
+			and lid is null
+			and sendwhen <= $2
+			and receivedat >= $3
+			and status <> $4
+		order by receivedat asc, sendwhen asc
+		limit $5`, inboxId, now, min, pandora.StatusConfirmed, len(out))
+	if err != nil {
+		return nil, err
+	}
+	defer results.Close()
+	var idx int
+	var buf []byte
+	for results.Next() {
+		var msg *pandora.Message
+		if idx < len(out) {
+			msg = &out[idx]
+		} else {
+			break
+		}
+		msg.Mid = &pandora.SHA1Key{}
+		err := results.Scan(&buf, &msg.Status, &msg.ReceivedAt, &msg.SendWhen, &msg.DeliveryCount)
+		if err != nil {
+			return out[:idx], err
+		}
+		copy(msg.Mid.Bytes(), buf)
+		idx++
+	}
+	return out[:idx], err
+}
+
 func fetchLatestMessage(msg *pandora.Message, db querier, inbox string, now time.Time, dur time.Duration) error {
 	err := reEnqueueMessages(db, now)
 	if err != nil {
@@ -216,6 +260,16 @@ func (ms *MessageStore) FetchAndLockLatest(recv string, dur time.Duration) (*pan
 		return fetchLatestMessage(&msg, tx, recv, time.Now(), dur)
 	})
 	return &msg, err
+}
+
+func (ms *MessageStore) FetchHeaders(out []pandora.Message, recv string, receivedAt time.Time) (int, error) {
+	var actual []pandora.Message
+	err := doInsideTransaction(ms.conn, func(tx querier) error {
+		var err error
+		actual, err = fetchHeaders(out, ms.conn, recv, time.Now(), receivedAt)
+		return err
+	})
+	return len(actual), err
 }
 
 func (ms *MessageStore) Ack(mid, lid pandora.Key, status pandora.AckStatus) error {

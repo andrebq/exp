@@ -101,6 +101,9 @@ func PrintKeyString(k Key) string {
 
 // String return the string representation of the value
 func (kp KeyPrinter) PrintString(k Key) string {
+	if k == nil {
+		return ""
+	}
 	out := make([]byte, hex.EncodedLen(len(k.Bytes())))
 	out = kp.Print(out, k)
 	return string(out)
@@ -305,6 +308,7 @@ func (m *Message) WriteTo(out url.Values) {
 	out.Set("leasedUntil", m.LeasedUntil.Format(time.RFC3339Nano))
 	out.Set("receivedAt", m.ReceivedAt.Format(time.RFC3339Nano))
 	out.Set("deliveryCount", strconv.FormatInt(int64(m.DeliveryCount), 10))
+	out.Set("sendWhen", m.SendWhen.Format(time.RFC3339Nano))
 	out.Set("validBody", fmt.Sprintf("%v", m.ValidBody()))
 }
 
@@ -426,6 +430,12 @@ type MessageStore interface {
 
 	// Ack will change the status of the given mid message, only if lid is still valid
 	Ack(mid, lid Key, status AckStatus) error
+
+	// FetchHeaders fetch at least len(out) messages that have the given receiver
+	// and were received after serverTime.
+	//
+	// Only pending messages are returned
+	FetchHeaders(out []Message, receiver string, serverTime time.Time) (int, error)
 }
 
 // Server implements the pandora message API
@@ -483,6 +493,11 @@ func (s *Server) FetchLatest(receiver string, lease time.Duration) (*Message, er
 		return nil, err
 	}
 	return s.doReadMessage(msg)
+}
+
+// FetchHeaders output at least len(out) messages headers, no body is returned
+func (s *Server) FetchHeaders(out []Message, receiver string, receivedAt time.Time) (int, error) {
+	return s.MessageStore.FetchHeaders(out, receiver, receivedAt)
 }
 
 func (s *Server) doReadMessage(msg *Message) (*Message, error) {

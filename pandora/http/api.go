@@ -21,6 +21,7 @@ package http
 // THE SOFTWARE.
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/andrebq/exp/pandora"
@@ -32,6 +33,10 @@ import (
 	"strings"
 	"time"
 )
+
+type jsonOutput struct {
+	val interface{}
+}
 
 const (
 	ErrNotFound     = pandora.ApiError("not found")
@@ -45,7 +50,8 @@ var (
 // Handler is the base type used to process
 // http request to a pandora server
 type Handler struct {
-	Server *pandora.Server
+	Server     *pandora.Server
+	AllowAdmin bool
 }
 
 func (ph *Handler) respondWith(w http.ResponseWriter, req *http.Request, val interface{}) {
@@ -70,6 +76,16 @@ func (ph *Handler) respondWith(w http.ResponseWriter, req *http.Request, val int
 	case map[string][]string:
 		w.WriteHeader(http.StatusOK)
 		io.WriteString(w, url.Values(val).Encode())
+	case []byte:
+		w.WriteHeader(http.StatusOK)
+		w.Write(val)
+	case io.Reader:
+		w.WriteHeader(http.StatusOK)
+		io.Copy(w, val)
+	case jsonOutput:
+		w.WriteHeader(http.StatusOK)
+		enc := json.NewEncoder(w)
+		enc.Encode(val.val)
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "response=%v", url.QueryEscape(fmt.Sprintf("%v", val)))
@@ -98,8 +114,57 @@ func (ph *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	} else if strings.HasSuffix(req.URL.Path, "/ack") {
 		ret = ph.Ack(req)
 	} else {
-		ret = ErrNotFound
+		if ph.AllowAdmin {
+			ret = ph.ServeAdmin(req)
+		} else {
+			ret = ErrNotFound
+		}
 	}
+}
+
+func (ph *Handler) ServeAdmin(req *http.Request) interface{} {
+	if strings.HasSuffix(req.URL.Path, "/admin/headers") {
+		serverTime, err := time.Parse(time.RFC3339Nano, req.Form.Get("receivedat"))
+		if err != nil {
+			// maybe a duration
+			dur, err := time.ParseDuration(req.Form.Get("receivedat"))
+			if err != nil {
+				// neither duration or time
+				return err
+			}
+			serverTime = time.Now().Add(dur)
+		}
+		receiver := req.Form.Get("receiver")
+		var out [10]pandora.Message
+		sz, err := ph.Server.FetchHeaders(out[:], receiver, serverTime)
+		if err != nil {
+			return err
+		}
+		if sz == 0 {
+			return jsonOutput{}
+		}
+		final := make([]url.Values, sz)
+		for i, _ := range final {
+			msg := &out[i]
+			output := make(url.Values)
+			msg.WriteTo(output)
+			final[i] = output
+		}
+		return jsonOutput{final}
+	} else if strings.HasSuffix(req.URL.Path, "/admin/fetchBlob") {
+		var kp pandora.KeyPrinter
+		var key pandora.SHA1Key
+		err := kp.ReadString(&key, req.Form.Get("mid"))
+		if err != nil {
+			return err
+		}
+		data, err := ph.Server.BlobStore.GetData(nil, &key)
+		if err != nil {
+			return err
+		}
+		return data
+	}
+	return ErrNotFound
 }
 
 func (ph *Handler) FetchAndLockLatest(req *http.Request) interface{} {
@@ -131,7 +196,6 @@ func (ph *Handler) Enqueue(req *http.Request) interface{} {
 		ctime = time.Now()
 	}
 	req.Form.Del(pandora.KeyClientTime)
-	println("req.Form: ", fmt.Sprintf("%v", req.Form))
 
 	msg, err := ph.Server.Send(req.Form.Get(pandora.KeySender), req.Form.Get(pandora.KeyReceiver), delay, ctime, req.Form)
 	if err != nil {
