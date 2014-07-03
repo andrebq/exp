@@ -20,14 +20,13 @@ func main() {
 		flag.Usage()
 		return
 	}
-	mount := &httpfs.Mount{
-		BaseDir: *dir,
+	fs, err := httpfs.NewDiskFile(*dir)
+	if err != nil {
+		log.Fatalf("error loading root file: %v", err)
 	}
+	http.Handle("/", &httpfs.Handler{fs})
 
-	log.Printf("Exposing directory: %v under address %v", *dir, *addr)
-
-	fs := httpfs.NewHttpFS(mount, "/fs")
-	http.Handle("/fs/", http.StripPrefix("/fs", fs))
+	log.Printf("starting server at: %v", *addr)
 
 	if err := http.ListenAndServe(*addr, nil); err != nil {
 		log.Fatalf("error: %v", err)
