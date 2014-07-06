@@ -14,9 +14,9 @@ func mustOpenShellDb(name string) *kv.DB {
 	var db *kv.DB
 	_, err = os.Stat(name)
 	if os.IsNotExist(err) {
-		db, err = kv.Create(name, &kv.Options{VerifyDbBeforeOpen: true})
+		db, err = kv.Create(name, &kv.Options{})
 	} else if err == nil {
-		db, err = kv.Open(name, &kv.Options{VerifyDbBeforeOpen: true})
+		db, err = kv.Open(name, &kv.Options{VerifyDbAfterOpen: true})
 	}
 	if err != nil {
 		panic(err)

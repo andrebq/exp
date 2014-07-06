@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/cznic/kv"
 	"github.com/cznic/bufs"
+	"github.com/cznic/kv"
 	"io/ioutil"
 	"net/http"
 	"strconv"

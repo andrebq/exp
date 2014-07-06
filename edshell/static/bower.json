@@ -4,9 +4,6 @@
   "homepage": "https://github.com/andrebq/exp",
   "description": "In Browser Text editor shell",
   "main": "index.html",
-  "moduleType": [
-    "globals"
-  ],
   "keywords": [
     "edshell"
   ],
@@ -21,5 +18,11 @@
     "bower_components",
     "test",
     "tests"
-  ]
+  ],
+  "dependencies": {
+    "codemirror": "~4.3.0",
+    "underscore": "~1.6.0",
+    "jquery": "~2.1.1",
+    "uri.js": "~1.13.2"
+  }
 }

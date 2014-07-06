@@ -1,31 +1,11 @@
 $(function(){
-    function CommandMap(opts) {
-        if (!(this instanceof CommandMap)) {
-            return new CommandMap();
-        }
-        this.$constructor(opts);
-    }
+    var EdShell = {};
+    EdShell.ActiveEditor = {};
+    EdShell.FocusedEditor = {};
 
-    CommandMap.prototype.$constructor = function(opts) {
-        opts = opts || {};
-        this.$opts = opts;
-        this.$cmds = {};
-        this.handler = this.$handler.bind(this);
-    };
-
-    CommandMap.prototype.$handler = function(ev) {
-        this.process(ev.target.getAttribute("data-command"), ev, ev.target);
-    };
-
-    CommandMap.prototype.addCommand = function(name, handler) {
-        this.$cmds[name] = handler;
-    };
-
-    CommandMap.prototype.process = function(name, opt, ctx) {
-        if (!!this.$cmds[name]) {
-            this.$cmds[name].apply(ctx, [opt]);
-        }
-    };
+    var cmds = new E.CommandMap();
+    var db = new E.ShellDB();
+    var fs = new E.Fs();
 
     function sizeOf(element) {
         return {
@@ -61,48 +41,73 @@ $(function(){
         editor.refresh();
     }
 
-    function saveCurrentFile(ev) {
-    }
+    cmds.addCommand("core/save", function(){
+        if (!!EdShell.ActiveEditor) {
+            var fileName = EdShell.ActiveEditor.getData({ currentFile: "."}).currentFile;
+            fs.write(fileName, EdShell.ActiveEditor.getValue())
+                .then(function(){
+                    EdShell.ActiveEditor.markClean();
+                }, function(err){
+                    console.log(err);
+                    alert('error saving file: ' + err);
+                });
+        }
+    }, EdShell);
 
-    function reloadCurrentFile(ev) {
-    }
+    cmds.addCommand("core/reload", function(){
+        if (!!EdShell.ActiveEditor) {
+            fs.read(EdShell.ActiveEditor.getData({ currentFile: "."}).currentFile).then(function(fileContents){
+                EdShell.ActiveEditor.setValue(fileContents);
+            });
+        }
+    }, EdShell);
 
-    function loadSession() {
-        return ShellDB().fetch("db/session");
-    }
+    cmds.addCommand("core/openFile", function(){
+        if (!!EdShell.ActiveEditor) {
+            E.Dialog.prompt("which file?").then(function(filename){
+                fs.read(filename).then(function(fileContents){
+                    EdShell.ActiveEditor.setValue(fileContents);
+                    EdShell.ActiveEditor.getData().currentFile = filename;
+                });
+            });
+        }
+    }, EdShell);
 
-    function loadFile(fileName) {
-        return Rx.Observable.fromPromise(
-            $.get(URI("/fs/" + fileName).normalizePathname()));
-    }
+    function createEditor(holder) {
+        var editor = CodeMirror(holder);
+        var data = {};
+        editor.setData = function(update) {
+           data = _.extend(update, data); 
+        };
 
-    var cmds = new CommandMap();
-    var db = new ShellDB();
+        editor.getData = function(def) {
+            if (_(def).isObject()) {
+                data = _.extend(def, data);
+            }
+            return data;
+        };
 
-    var pipeline = new E.Proc.pipeline([
-        function(input){
-            console.log("first ", input);
-            this.output.write(input);
-        },
-        function(input){
-            console.log("second ", input);
-            this.output.write(input);
-        },
-    ]);
+        editor.on("focus", function(cm){
+            EdShell.ActiveEditor = cm;
+            EdShell.FocusedEditor = cm;
+        });
+
+        editor.on("blur", function(cm){
+            if (EdShell.FocusedEditor !== cm) {
+                EdShell.FocusedEditor = null;
+            }
+        });
+        return editor;
+    };
 
     (function(){
         var initialSize = sizeOf(document.getElementById("content"));
-        var mainContent = CodeMirror(document.getElementById("content"));
-        fullSize(mainContent);
-        cmds.addCommand("core/save", saveCurrentFile);
-        cmds.addCommand("core/reload", reloadCurrentFile);
-
-        pipeline.head.connectToStdin(Rx.Observable
-            .interval(500)
-            .timeInterval()
-            .take(10));
+        var mainEditor = createEditor(document.getElementById("content"));
+        mainEditor.focus();
+        EdShell.mainEditor = mainEditor;
+        fullSize(mainEditor);
 
         document.getElementById("topbar").addEventListener('click', cmds.handler, false);
-        $(window).on('resize', function() { fullSize(mainContent) });
+        $(window).on('resize', function() { fullSize(mainEditor) });
     }());
 });

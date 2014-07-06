@@ -11,7 +11,7 @@
         this.opts = opts;
     };
 
-    // Save write data to key and return a promisse
+    // Save write data to key and return a promise
     // that is resolved when the system completes the save
     // 
     // data is saved as a JSON object on server (arrays are valid)
@@ -20,20 +20,19 @@
         var deferred = $.Deferred();
 
         callRESTful(deferred, { url: path, data: JSON.stringify(data), operation: "write" }, rejectWhenNot200);
-
-        return Rx.Observable.fromPromise(deferred);
+        return deferred.promise();
     };
 
     // fetch goes to the server and search for the given key,
     //
-    // if the key isn't found, then fetch will resolve the promisse passing null as the returned value
+    // if the key isn't found, then fetch will resolve the promise passing null as the returned value
     ShellDB.prototype.fetch = function(key) {
         var path = URI("/db/" + key).normalizePathname();
         var deferred = $.Deferred();
 
         callRESTful(deferred, { url: path, operation: "read" }, rejectOn404);
 
-        return Rx.Observable.fromPromise(deferred);
+        return deferred.promise();
     };
 
     ShellDB.prototype.fetchOrDefault = function(key, def) {
@@ -42,7 +41,7 @@
 
         callRESTful(deferred, { url: path, operation: "read" }, returnDefaultOn404(def));
 
-        return Rx.Observable.fromPromise(deferred);
+        return deferred.promise();
     };
 
     function returnDefaultOn404(def) {
@@ -155,5 +154,5 @@
         };
     };
 
-    window.ShellDB = ShellDB;
+    E.ShellDB = ShellDB;
 }());

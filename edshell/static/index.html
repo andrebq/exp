@@ -4,19 +4,21 @@
         <title>Ed-Shell</title>
         <link rel="stylesheet" type="text/css" href="lib/main.css">
         <link rel="stylesheet" type="text/css" href="bower_components/codemirror/lib/codemirror.css">
-        <script src="bower_components/rxjs/dist/rx.all.js"></script>
         <script src="bower_components/jquery/dist/jquery.min.js"></script>
         <script src="bower_components/uri.js/src/URI.min.js"></script>
         <script src="bower_components/codemirror/lib/codemirror.js"></script>
+        <script src="bower_components/underscore/underscore.js"></script>
         <script src="lib/e.js"></script>
-        <script src="lib/proc.js"></script>
+        <script src="lib/dialog.js"></script>
         <script src="lib/shelldb.js"></script>
+        <script src="lib/fs.js"></script>
     </head>
     <body>
         <article id="topbar" class="topbar">
             <nav>
                 <li><button data-command="core/save">Save</button></li>
                 <li><button data-command="core/reload">Reload</button></li>
+                <li><button data-command="core/openFile">Open...</button></li>
             </nav>
         </article>
 
