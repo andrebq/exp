@@ -86,6 +86,9 @@ func (ph *Handler) respondWith(w http.ResponseWriter, req *http.Request, val int
 		w.WriteHeader(http.StatusOK)
 		enc := json.NewEncoder(w)
 		enc.Encode(val.val)
+	case string:
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, val)
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "response=%v", url.QueryEscape(fmt.Sprintf("%v", val)))
@@ -141,7 +144,7 @@ func (ph *Handler) ServeAdmin(req *http.Request) interface{} {
 			return err
 		}
 		if sz == 0 {
-			return jsonOutput{}
+			return http.StatusNoContent
 		}
 		final := make([]url.Values, sz)
 		for i, _ := range final {
@@ -163,6 +166,12 @@ func (ph *Handler) ServeAdmin(req *http.Request) interface{} {
 			return err
 		}
 		return data
+	} else if strings.HasSuffix(req.URL.Path, "/admin/reenqueue") {
+		err := ph.Server.MessageStore.Reenqueue(time.Now())
+		if err != nil {
+			return err
+		}
+		return "OK"
 	}
 	return ErrNotFound
 }
@@ -174,6 +183,9 @@ func (ph *Handler) FetchAndLockLatest(req *http.Request) interface{} {
 	receiver := req.Form.Get(pandora.KeyReceiver)
 	duration, _ := time.ParseDuration(req.Form.Get(pandora.KeyLeaseTime))
 	msg, err := ph.Server.FetchLatest(receiver, duration)
+	if err == pandora.ErrNoMessages {
+		return http.StatusNoContent
+	}
 	if err != nil {
 		return err
 	}

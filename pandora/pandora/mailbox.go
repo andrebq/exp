@@ -30,6 +30,19 @@ import (
 	"time"
 )
 
+// AckStatus represent the status of the processing of the message
+type AckStatus byte
+const (
+	// Confirm that the message was processed and remove it from the mailbox
+	Confirm = AckStatus(pandora.StatusConfirmed)
+	// Unable to process the message, put it back on the mailbox
+	Reject = AckStatus(pandora.StatusRejected)
+)
+
+var (
+	ErrNoData = errors.New("no data available")
+)
+
 // HttpClient defines the interface required to enable a Mailbox object
 // to talk with a Pandora server
 type HttpClient interface {
@@ -44,7 +57,7 @@ type Mailbox struct {
 }
 
 // Ack marks the message as processed or rejected
-func (mb *Mailbox) Ack(mid, lid string, status pandora.AckStatus) error {
+func (mb *Mailbox) Ack(mid, lid string, status AckStatus) error {
 	msgToAck := make(url.Values)
 	msgToAck.Set("mid", mid)
 	msgToAck.Set("lid", lid)
@@ -74,6 +87,10 @@ func (mb *Mailbox) Fetch(from string, lockFor time.Duration) (url.Values, error)
 		return nil, err
 	}
 	defer res.Body.Close()
+
+	if res.StatusCode == http.StatusNoContent {
+		return nil, ErrNoData
+	}
 
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("invalid status code: %v", res.StatusCode)

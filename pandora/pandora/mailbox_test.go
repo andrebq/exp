@@ -32,8 +32,8 @@ func mustCreateServer() *pandora.Server {
 
 func TestMailbox(t *testing.T) {
 	server := mustCreateServer()
-	handler := &pandorahttp.PandoraHandler{
-		server,
+	handler := &pandorahttp.Handler{
+		Server: server,
 	}
 
 	ts := httptest.NewServer(handler)
@@ -63,8 +63,20 @@ func TestMailbox(t *testing.T) {
 		t.Errorf("expected mid %v got %v", fetched.Get("mid"), mid)
 	}
 
-	err = mb.Ack(fetched.Get("mid"), fetched.Get("lid"), pandora.StatusConfirmed)
+	err = mb.Ack(fetched.Get("mid"), fetched.Get("lid"), Confirm)
 	if err != nil {
 		t.Errorf("error doing ACK. %v", err)
+	}
+
+
+	_, err = mb.Send("invalid@local", "b@remote", 0, body)
+	if err != nil {
+		t.Fatalf("error sending a message from invalid@local")
+	}
+
+	// now, I should fetch from invalid@local but
+	_, err = mb.Fetch("invalid@local", time.Minute*5)
+	if err != ErrNoData {
+		t.Fatalf("should have received error %v but got %v", ErrNoData, err)
 	}
 }

@@ -32,12 +32,21 @@
             <div class="main wrapper clearfix">
                 <article id="send-message" ng-controller="PandoraCtrl">
                     <section>
+                        <form ng-submit="fetchMessages()">
+                            <ul>
+                                <li><label>Receiver: <input type="text" ng-model="queryParameters.receiver"></label></li>
+                                <li><label>Receivd at: <input type="text" ng-model="queryParameters.receivedat"></label></li>
+                                <li><label>ServerTime: <input type="text" ng-model="queryParameters.servertime"></label></li>
+                            </ul>
+                            <button>Recuperar mensagens</button>
+                        </form>
                         <h2>Last 10 messages</h2>
                         <ul>
                             <li ng-repeat="msg in msgsSent">
                                 <span>Mid: <a href="/api/admin/fetchBlob?mid={{ msg.mid }}">{{ msg.mid }}</a></span> / <span>Received At: {{ msg.receivedAt }}</span> / <span>Send when: {{ msg.sendWhen }}</span>
                             </li>
                         </ul>
+                        <button ng-click="fetchNext10()">Próximas 10</button> / <button ng-click="reEnqueue()">ReEnqueue {{ reEnqueueError }}</button>
                     </section>
                     <section>
                         <h2>Send new message</h2>

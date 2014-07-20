@@ -70,6 +70,9 @@ const (
 	// Unable to change the status
 	ErrUnableToChangeStatus = ApiError("unable to change status")
 
+	// No messages that match the criteria at this moment
+	ErrNoMessages = ApiError("no messages at this moment")
+
 	// Body field used to store the sender
 	KeySender = "sender"
 
@@ -436,6 +439,9 @@ type MessageStore interface {
 	//
 	// Only pending messages are returned
 	FetchHeaders(out []Message, receiver string, serverTime time.Time) (int, error)
+
+	// Reenqueue messages considering now
+	Reenqueue(now time.Time) error
 }
 
 // Server implements the pandora message API

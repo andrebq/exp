@@ -50,6 +50,51 @@ func mustCreateServer() *pandora.Server {
 		MessageStore: ms,
 	}
 }
+func TestPandoraAPIEmptyMessages(t *testing.T) {
+	server := mustCreateServer()
+	handler := &Handler{
+		Server:     server,
+		AllowAdmin: true,
+	}
+
+	ts := httptest.NewServer(handler)
+	defer ts.Close()
+
+	// send a message from invalid@mailbox
+	// to prevent a bad request caused by a invalid receiver
+	msgToSend := make(url.Values)
+	msgToSend.Set(pandora.KeySender, "invalid@mailbox")
+	msgToSend.Set(pandora.KeyReceiver, "b@local")
+	msgToSend.Set(pandora.KeyClientTime, time.Now().Format(time.RFC3339Nano))
+	msgToSend.Set("info", "testing....")
+
+	res, err := http.PostForm(ts.URL+"/send", msgToSend)
+	if err != nil {
+		t.Fatalf("error sending post: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("invalid status code. should be 200 got %v", res.StatusCode)
+	}
+
+	// now, try to consume the message
+	// but shouldn't be any messages to invalid@mailbox
+	msgToFetch := make(url.Values)
+	msgToFetch.Set(pandora.KeyReceiver, "invalid@mailbox")
+	msgToFetch.Set(pandora.KeyLeaseTime, "5m")
+
+	t.Logf("starting fetch")
+
+	res, err = http.PostForm(ts.URL+"/fetch", msgToFetch)
+	if err != nil {
+		t.Fatalf("error fetching the message: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusNoContent {
+		t.Errorf("invalid status code. should be 204 got %v", res.StatusCode)
+	}
+}
 
 func TestPandoraAPI(t *testing.T) {
 	server := mustCreateServer()

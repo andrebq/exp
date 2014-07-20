@@ -121,6 +121,10 @@ func (ms *MessageStore) InitTables() (err error) {
 	return
 }
 
+func (ms *MessageStore) Reenqueue(now time.Time) error {
+	return reEnqueueMessages(ms.conn, time.Now())
+}
+
 // take all messages that have a lease time expired and
 // remove the lock information.
 //
@@ -148,7 +152,7 @@ func fetchHeaders(out []pandora.Message, db querier, inbox string, now, min time
 		where receiverid = $1
 			and lid is null
 			and sendwhen <= $2
-			and receivedat >= $3
+			and receivedat > $3
 			and status <> $4
 		order by receivedat asc, sendwhen asc
 		limit $5`, inboxId, now, min, pandora.StatusConfirmed, len(out))
@@ -195,6 +199,9 @@ func fetchLatestMessage(msg *pandora.Message, db querier, inbox string, now time
 			and status <> $3
 		order by sendwhen asc
 		limit 1`, inboxId, now, pandora.StatusConfirmed).Scan(&id, &buf, &msg.Status, &msg.ReceivedAt, &msg.SendWhen, &msg.DeliveryCount)
+	if err == sql.ErrNoRows {
+		return pandora.ErrNoMessages
+	}
 	if err != nil {
 		return err
 	}
@@ -281,7 +288,10 @@ func (ms *MessageStore) Ack(mid, lid pandora.Key, status pandora.AckStatus) erro
 			return pandora.ErrUnableToChangeStatus
 		}
 
-		err := tx.QueryRow("update pgstore_messages set status = $1 where mid = $2 and lid = $3 and leaseuntil >= $4 returning id", status, mid.Bytes(), lid.Bytes(), time.Now()).Scan(&id)
+		err := tx.QueryRow(`update pgstore_messages
+			set status = $1, lid = null, leaseuntil = null
+			where mid = $2 and lid = $3 and leaseuntil >= $4
+			returning id`, status, mid.Bytes(), lid.Bytes(), time.Now()).Scan(&id)
 		if err != nil {
 			return err
 		}

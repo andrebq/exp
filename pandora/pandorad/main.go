@@ -13,6 +13,12 @@ import (
 var (
 	addr   = flag.String("addr", "0.0.0.0:4003", "Address to listen for incoming requests. Used also to serve the webui")
 	static = flag.String("staticDir", "!usegas", "Static directory to serve webui files. By default uses gas (requires that a valid GOPATH is set")
+	dbUser = flag.String("dbUser", "pandora", "User to access the pandora database")
+	dbPasswd = flag.String("dbPasswd", "pandora", "Password to access the pandora database")
+	dbHost = flag.String("dbHost", "localhost", "Host to connect")
+	dbName = flag.String("dbName", "pandpra", "Name of the database to connect")
+
+	initPgStore = flag.Bool("initPgStore", false, "Initialize the tables on the database")
 	h      = flag.Bool("h", false, "Help")
 )
 
@@ -23,13 +29,26 @@ func main() {
 		return
 	}
 
-	messageStore, err := pgstore.OpenMessageStore("pandora", "pandora", "localhost", "pandora")
+	messageStore, err := pgstore.OpenMessageStore(*dbUser, *dbPasswd, *dbHost, *dbName)
 	if err != nil {
 		log.Fatalf("error opening message store: %v", err)
 	}
-	blobStore, err := pgstore.OpenBlobStore("pandora", "pandora", "localhost", "pandora")
+	blobStore, err := pgstore.OpenBlobStore(*dbUser, *dbPasswd, *dbHost, *dbName)
 	if err != nil {
 		log.Fatalf("error opening blob store: %v", err)
+	}
+
+	if *initPgStore {
+		if err := messageStore.InitTables(); err != nil {
+			log.Fatalf("Error initializing message tables: %v", err)
+		}
+
+		if err := blobStore.InitTables(); err != nil {
+			log.Fatalf("Error initializing blob tables: %v", err)
+		}
+
+		log.Printf("Tables initialized")
+		return
 	}
 
 	server := pandora.Server{

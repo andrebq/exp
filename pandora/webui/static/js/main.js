@@ -9,17 +9,6 @@ function PandoraCtrl($scope) {
 	}
 
 	function fetchMessages() {
-		var toEncode = {
-			receiver: "b@remote",
-			receivedat: "-24h",
-		};
-		$.getJSON("/api/admin/headers", $.param(toEncode), function(result){
-			$scope.$apply(function(){
-				_.each(result, function(value){
-					$scope.msgsSent.push(mergeKeys(value));
-				});
-			});
-		});
 	}
 
 	function mergeKeys(msg) {
@@ -57,6 +46,12 @@ function PandoraCtrl($scope) {
 
 	$scope.newField = makeNewField();
 	$scope.msgsSent = [];
+	$scope.queryParameters = {
+		receiver: "b@local",
+		receivedat: "-24h",
+	};
+
+	$scope.reEnqueueError = "OK";
 
 	$scope.message = {
 		fields: [
@@ -87,5 +82,29 @@ function PandoraCtrl($scope) {
 		return true;
 	};
 
-	fetchMessages();
+	$scope.fetchMessages = function() {
+		$.getJSON("/api/admin/headers", $.param($scope.queryParameters), function(result){
+			$scope.$apply(function(){
+				_.each(result, function(value){
+					$scope.msgsSent.push(mergeKeys(value));
+				});
+			});
+		});
+	};
+
+	$scope.fetchNext10 = function() {
+		$scope.queryParameters.receivedat = $scope.msgsSent[$scope.msgsSent.length - 1].receivedAt;
+		$scope.fetchMessages();
+	};
+
+	$scope.reEnqueue = function() {
+		$scope.reEnqueueError = "pending";
+		$.get("/api/admin/reenqueue").then(function(result) {
+			$scope.$apply(function(){
+				$scope.reEnqueueError = result; });
+		}, function(err) {
+			$scope.$apply(function(){
+				$scope.reEnqueueError = err.statusText; });
+		});
+	};
 }
