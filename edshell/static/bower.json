@@ -22,7 +22,17 @@
   "dependencies": {
     "codemirror": "~4.3.0",
     "underscore": "~1.6.0",
-    "jquery": "~2.1.1",
-    "uri.js": "~1.13.2"
+    "uri.js": "~1.13.2",
+    "polymer": "Polymer/polymer#~0.3.3",
+    "core-elements": "Polymer/core-elements#~0.3.3",
+    "paper-elements": "Polymer/paper-elements#~0.3.3",
+    "stringjs": "~1.9.0",
+    "rxjs": "~2.2.28",
+    "q": "1.0.1",
+    "react": "~0.10.0",
+    "sprintf": "~1.0.0",
+    "ace-element": "PolymerLabs/ace-element#~0.3.0",
+    "ace-builds": "~1.1.5",
+    "juicy-ace-editor": "~0.0.2"
   }
 }

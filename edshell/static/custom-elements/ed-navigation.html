@@ -1,0 +1,27 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+
+<polymer-element name="ed-navigation"
+    attributes="items maxentries">
+    <template>
+    <style>
+    :host nav {
+        background-color: inherit;
+    }
+    :host li.active {
+        border-left: solid 4px blue;
+        background-color: #878AB2;
+        padding: 5px;
+    }
+    :host li {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        cursor: pointer;
+    }
+    </style>
+    <div id="root">
+    </div>
+    </template>
+    <script src="./ed-navigation.js"></script>
+</polymer-element>
+

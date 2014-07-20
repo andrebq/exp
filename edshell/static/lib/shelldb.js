@@ -1,14 +1,11 @@
 ;(function(){ 
-    function ShellDB(opts) {
+    this.E = this.E || {};
+
+    function ShellDB() {
         if (!(this instanceof ShellDB)) {
             return new ShellDB();
         }
-
-        this.$constructor(opts);
-    };
-
-    ShellDB.prototype.$constructor = function(opts) {
-        this.opts = opts;
+        this.prefix = '/db/';
     };
 
     // Save write data to key and return a promise
@@ -16,7 +13,7 @@
     // 
     // data is saved as a JSON object on server (arrays are valid)
     ShellDB.prototype.save = function(key, data) {
-        var path = URI("/db/" + key).normalizePathname();
+        var path = URI(this.prefix + key).normalizePathname();
         var deferred = $.Deferred();
 
         callRESTful(deferred, { url: path, data: JSON.stringify(data), operation: "write" }, rejectWhenNot200);
@@ -27,7 +24,7 @@
     //
     // if the key isn't found, then fetch will resolve the promise passing null as the returned value
     ShellDB.prototype.fetch = function(key) {
-        var path = URI("/db/" + key).normalizePathname();
+        var path = URI(this.prefix + key).normalizePathname();
         var deferred = $.Deferred();
 
         callRESTful(deferred, { url: path, operation: "read" }, rejectOn404);
@@ -36,7 +33,7 @@
     };
 
     ShellDB.prototype.fetchOrDefault = function(key, def) {
-        var path = URI("/db/" + key).normalizePathname();
+        var path = URI(this.prefix + key).normalizePathname();
         var deferred = $.Deferred();
 
         callRESTful(deferred, { url: path, operation: "read" }, returnDefaultOn404(def));
@@ -154,5 +151,5 @@
         };
     };
 
-    E.ShellDB = ShellDB;
-}());
+    this.E.ShellDB = ShellDB;
+}.bind(window)());

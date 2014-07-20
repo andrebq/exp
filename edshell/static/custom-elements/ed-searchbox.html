@@ -1,0 +1,19 @@
+<link rel="import" href="../bower_components/polymer/polymer.html">
+
+<polymer-element name="ed-searchbox"
+    attributes="delay">
+    <template>
+        <style>
+        :host input{
+            width: 100%;
+            display: block;
+            font-size: 1.5em;
+            box-sizing: border-box;
+            border: none;
+            background-color: #878AB2;
+        }
+        </style>
+        <input type="text" placehoder="search for files..." id="searchbox">
+    </template>
+    <script src="./ed-searchbox.js"></script>
+</polymer-element>

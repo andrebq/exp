@@ -2,34 +2,38 @@
 <html>
     <head>
         <title>Ed-Shell</title>
-        <link rel="stylesheet" type="text/css" href="lib/main.css">
-        <link rel="stylesheet" type="text/css" href="bower_components/codemirror/lib/codemirror.css">
-        <script src="bower_components/jquery/dist/jquery.min.js"></script>
-        <script src="bower_components/uri.js/src/URI.min.js"></script>
-        <script src="bower_components/codemirror/lib/codemirror.js"></script>
+        <script src="bower_components/platform/platform.js"></script>
+        <script src="bower_components/react/react-with-addons.js"></script>
+        <script src="bower_components/stringjs/lib/string.js"></script>
+        <script src="bower_components/uri.js/src/URI.js"></script>
         <script src="bower_components/underscore/underscore.js"></script>
-        <script src="lib/e.js"></script>
-        <script src="lib/dialog.js"></script>
-        <script src="lib/shelldb.js"></script>
+        <script src="bower_components/rxjs/dist/rx.all.js"></script>
+        <script src="bower_components/q/q.js"></script>
+        <script src="bower_components/sprintf/dist/sprintf.min.js"></script>
+        <script src="lib/stringview.js"></script>
+        <script src="lib/rx.js"></script>
+        <script src="lib/io.js"></script>
+        <script src="lib/xhr.js"></script>
         <script src="lib/fs.js"></script>
+        <script src="lib/css.js"></script>
+        <link rel="import" href="custom-elements/ed-applayout.html">
+        <link rel="import" href="custom-elements/ed-editor.html">
+        <link rel="import" href="custom-elements/ed-sidebar.html">
+        <link rel="import" href="custom-elements/ed-blockui.html">
     </head>
     <body>
-        <article id="topbar" class="topbar">
-            <nav>
-                <li><button data-command="core/save">Save</button></li>
-                <li><button data-command="core/reload">Reload</button></li>
-                <li><button data-command="core/openFile">Open...</button></li>
-            </nav>
-        </article>
-
-        <article class="workspace">
-            <section id="sidebar" class="hide">
-            </section>
-            <section id="content">
-            </section>
-            <section id="aux" class="hide">
-            </section>
-        </article>
-        <script src="lib/main.js"></script>
+        <ed-blockui id="popup" backdrop="#backdrop" content="#content">
+            <div id="backdrop"></div>
+            <div id="content">
+                <h1>Dialog</h1>
+            </div>
+        </ed-blockui>
+        <ed-applayout>
+            <ed-editor id="left">
+            </ed-editor>
+            <div id="middle"></div>
+            <div id="right"></div>
+            <ed-sidebar></ed-sidebar>
+        </ed-applayout>
     </body>
 </html>

@@ -22,6 +22,42 @@ type Info struct {
 	CanWrite bool
 }
 
+// TreeNode is used to represent the hierarchy between files
+type TreeNode struct {
+	Parent *TreeNode
+	Childs []*TreeNode
+	File File
+}
+
+// Will write the abs path of this node to the given output
+func (tn *TreeNode) WriteAbsPath(out io.Writer) (n int, err error) {
+	if (tn == nil) {
+		return 0, nil
+	}
+	var total int
+	if sz, err := tn.Parent.WriteAbsPath(out); err != nil {
+		total += sz
+		return total, err
+	} else {
+		total += sz
+	}
+	if sz, err := io.WriteString(out, tn.File.Info().Name); err != nil {
+		total += sz
+		return total, err
+	} else {
+		total += sz
+	}
+	if tn.File.Info().Dir {
+		if sz, err := io.WriteString(out, "/"); err != nil {
+			total += sz
+			return total, err
+		} else {
+			total += sz
+		}
+	}
+	return total, nil
+}
+
 type Truncable interface {
 	Truncate() error
 }
@@ -58,6 +94,33 @@ func WriteToFile(out File, in io.Reader) error {
 		defer writer.Close()
 		_, err = io.Copy(writer, in)
 		return err
+	}
+	return nil
+}
+
+func DeepReadTo(out io.Writer, in File, depth int) error {
+	tn, err := BuildTreeNode(in, depth)
+	if err != nil {
+		return err
+	}
+	return deepReadNode(out, tn)
+}
+
+func deepReadNode(out io.Writer, n *TreeNode) error {
+	_, err := n.WriteAbsPath(out)
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(out, "\n")
+	if err != nil {
+		return err
+	}
+
+	for _, c := range n.Childs {
+		err := deepReadNode(out, c)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -114,6 +177,35 @@ func NewDiskFile(filename string) (File, error) {
 		abs:   filename,
 		isdir: info.IsDir(),
 	}, nil
+}
+
+func BuildTreeNode(root File, depth int) (*TreeNode, error) {
+	tn := &TreeNode{
+		Parent: nil,
+		File: root,
+		Childs: nil,
+	}
+	if !root.Info().Dir || depth == 0 {
+		return tn, nil
+	}
+
+	childs, err := root.Childs()
+	if err != nil {
+		return tn, err
+	}
+	for _, childName := range childs {
+		childFile, err := root.Open(childName)
+		if err != nil {
+			return tn, err
+		}
+		childNode, err := BuildTreeNode(childFile, depth-1)
+		if err != nil {
+			return tn, err
+		}
+		childNode.Parent = tn
+		tn.Childs = append(tn.Childs, childNode)
+	}
+	return tn, err
 }
 
 func (df *DiskFile) Info() Info {

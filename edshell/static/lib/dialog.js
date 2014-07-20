@@ -1,4 +1,6 @@
 ;(function(){
+    this.E = this.E || {};
+
     function Dialog() {
         if (!(this instanceof Dialog)) {
             return new Dialog();
@@ -13,5 +15,5 @@
         return deferred.promise();
     };
 
-    E.Dialog = Dialog;
-}());
+    this.E.Dialog = Dialog;
+}.bind(window)());
