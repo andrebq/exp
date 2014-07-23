@@ -269,6 +269,11 @@ func (ic *AtlasChunk) Size() (w, h int) {
 	return rect.Dx(), rect.Dy()
 }
 
+func (ic *AtlasChunk) Sizef() (w, h float32) {
+	iw, ih := ic.Size()
+	return float32(iw), float32(ih)
+}
+
 func (ic *AtlasChunk) UVRect() UVRect {
 	return ic.uvrect
 }
