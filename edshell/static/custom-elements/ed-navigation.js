@@ -21,6 +21,9 @@
         maxentries: 50,
         ready: function() {
         },
+        created: function() {
+            this.$subs = new E.Rx.Util.SubManager();
+        },
         itemsChanged: function(oldVal, newVal) {
             this.render();
         },
@@ -38,14 +41,17 @@
             }.bind(this);
         },
         attached: function() {
-            Rx.Observable.fromEvent(this.$.root, 'mouseover')
+            this.$subs.add(Rx.Observable.fromEvent(this.$.root, 'mouseover')
                 .pluck("target")
                 .filter(E.Rx.isTag("LI"))
-                .subscribe(this.toggleActive(true));
-            Rx.Observable.fromEvent(this.$.root, 'mouseout')
+                .subscribe(this.toggleActive(true)));
+            this.$subs.add(Rx.Observable.fromEvent(this.$.root, 'mouseout')
                 .pluck("target")
                 .filter(E.Rx.isTag("LI"))
-                .subscribe(this.toggleActive(false));
+                .subscribe(this.toggleActive(false)));
+        },
+        detached: function() {
+            this.$subs.dispose();
         },
     });
 }.bind(window)());

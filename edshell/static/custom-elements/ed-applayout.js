@@ -5,6 +5,25 @@
         }
     }
 
+    function confirmIfWantToReplace(me, editor, confirmDialog) {
+        return Q.promise(function(resolve, reject, notify){
+            // nothing to check if the editor is clean
+            if (editor.isClean()) { resolve(true); return; }
+            if (!confirmDialog) { resolve(false); return; }
+            function userAction(e) {
+                console.log("userAction");
+                var result = e.target.getAttribute("data-result");
+                if (result) {
+                    confirmDialog.removeEventListener("click", userAction);
+                    resolve(result === "ok");
+                }
+                E.Rx.killEvent(e);
+            }
+            confirmDialog.addEventListener("click", userAction, false);
+            confirmDialog.toggle();
+        });
+    }
+
     function notifyResize(node, newsize) {
         if (_.isFunction(node.resize)) {
             node.resize(newsize);
@@ -79,7 +98,70 @@
         left: "#left",
         mode: "single",
         saveLastFocusedEditor: function(target) {
-            this.$lastFocusedEditor = target;
+            if (target) {
+                this.$lastFocusedEditor = target;
+            }
+        },
+        $focusLastEditor: function() {
+            if (this.$lastFocusedEditor) {
+                this.$lastFocusedEditor.focus();
+            }
+        },
+        $removeFocusFromEditor: function() {
+            if (this.$lastFocusedEditor) {
+                this.$lastFocusedEditor.blur();
+            }
+        },
+        $handleOpenFile: function(filename) {
+            var that = this;
+            var filecontent = null;
+            var editor = this.$lastFocusedEditor;
+            function handleFileFetched(content) {
+                confirmIfWantToReplace(that, editor, that.$.confirmDiscardChanges)
+                    .then(setContentsOnEditor);
+                filecontent = content;
+            };
+            function setContentsOnEditor(result) {
+                if (result) {
+                    // user do want to replace the contents
+                    editor.setValue(filecontent.data.response.toString());
+                    editor.markClean(filecontent.data.filename);
+                    editor.setBufferName(filecontent.data.filename);
+                    that.inform(sprintf("File %s loaded", filecontent.data.filename));
+                }
+            };
+            E.Fs().read(filename).
+                then(handleFileFetched, this.$informError);
+        },
+        $handleFileSave: function(editor) {
+            var that = this;
+            if (editor.isUnamedBuffer()) {
+                this.inform('Cannot save unamed buffers....');
+            } else {
+                function fileSaved(result) {
+                    that.inform(sprintf('File %s saved!', result.data.filename));
+                    editor.markClean();
+                };
+
+                function unableToSaveFile(result) {
+                    that.inform(sprintf('Unable to save file %s. Cause: %s', result.data.filename, result.err));
+                };
+                E.Fs().write(editor.getBufferName(), editor.getValue())
+                    .then(fileSaved, unableToSaveFile);
+            }
+        },
+        inform: function(options) {
+            if (!_.isObject(options)) {
+                options = {
+                    message: options.toString(),
+                    type: 'info',
+                }
+            }
+            var toast = this.$.informToast;
+            toast.classList.remove("error", "info", "warn");
+            toast.classList.add(options.type);
+            toast.text = options.message;
+            toast.show();
         },
         attached: function() {
             this.$subs.add("editor-focused", Rx.Observable.fromEvent(this, 'editor-focused')
@@ -89,6 +171,9 @@
             this.$subs.add("editor-created", Rx.Observable.fromEvent(this, 'editor-created')
                 .pluck('target')
                 .subscribe(setFocus));
+            this.$subs.add("editor-save", Rx.Observable.fromEvent(this, 'editor-save')
+                .pluck('target')
+                .subscribe(this.$handleFileSave.bind(this)));
             this.$subs.add("window-f2", Rx.Observable.fromEvent(window, 'keyup')
                 .pluck('which')
                 .filter(E.Rx.isKeyCode(E.Rx.Keycodes.F2))
@@ -96,16 +181,23 @@
                     this.toggleSideBar(true);
                 }.bind(this)));
             this.$subs.add("search-completed", Rx.Observable.fromEvent(this, "search-completed")
-                .pluck('detail').pluck('value')
-                .subscribe(function(value){
-                    this.toggleSideBar(false);
-                }.bind(this)));
+                .pluck('detail')
+                .map(E.Rx.exec(function() { this.toggleSideBar(false); }.bind(this)))
+                .filter(function(value){ return value.status === "confirm"; })
+                .pluck('value')
+                .subscribe(this.$handleOpenFile.bind(this)));
             this.$subs.add("window-resize", Rx.Observable
                 .fromEvent(window, 'resize')
                 .pluck("target")
                 .map(E.Rx.dimension)
                 .filter(E.Rx.distinctFromLast())
                 .subscribe(this.handleResize.bind(this)));
+            this.$subs.add("dialog-closed", Rx.Observable
+                .fromEvent(window, "dialog-closed")
+                .subscribe(this.$focusLastEditor.bind(this)));
+            this.$subs.add("dialog-opened", Rx.Observable
+                .fromEvent(window, "dialog-opened")
+                .subscribe(this.$removeFocusFromEditor.bind(this)));
             var nodes = this.$getNodes();
             // the side bar start hidden
             hideNodes([nodes.sidebar]);
@@ -139,6 +231,15 @@
         },
         created: function() {
             this.$subs = new E.Rx.Util.SubManager();
+            this.$informError = function(value) {
+                var text = "";
+                if (value instanceof E.IO.Data) {
+                    text = value.err.toString();
+                } else {
+                    text = value.toString();
+                }
+                this.inform({type: "error", message: text});
+            }.bind(this);
         },
         attributeChanged: function(name, oldval, newval) {
             if (name === "mode") {

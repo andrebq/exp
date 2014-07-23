@@ -129,7 +129,7 @@
                 return;
             }
             function cacheAndResolve(val){
-                var result = new E.IO.Data(val.data, null);
+                var result = new E.IO.Data(val.data.text, null);
                 if (cache) {
                     cache[url + mimetype] = result;
                 }

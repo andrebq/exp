@@ -66,11 +66,11 @@
     };
 
     Request.post = function(url, data) {
-        return Request("POST", url, data);
+        return Request({ method: "POST", url: url, input: data});
     };
 
     Request.put = function(url, data) {
-        return Request("PUT", url, data);
+        return Request({ method: "PUT", url: url, input: data});
     };
 
     // will read the request and set the responseText to be a data url representation

@@ -17,7 +17,7 @@ func mustOpenShellDb(name string) *kv.DB {
 	if os.IsNotExist(err) {
 		db, err = kv.Create(name, &kv.Options{})
 	} else if err == nil {
-		db, err = kv.Open(name, &kv.Options{VerifyDbBeforeOpen: true})
+		db, err = kv.Open(name, &kv.Options{})
 	}
 	if err != nil {
 		panic(err)
@@ -31,7 +31,15 @@ func cleanup(db *DB) {
 	// wait for one of the signals
 	log.Printf("going out with signal: %v", <-buf)
 	// cleanup the database
-	db.DB.Close()
+	if err := db.DB.Rollback(); err != nil {
+		log.Printf("error rollingback transactions: %v", err)
+	}
+	if err := db.DB.BeginTransaction(); err != nil {
+		log.Printf("error starting the close transaction: %v", err)
+	}
+	if err := db.DB.Close(); err != nil {
+		log.Printf("error closing the database: %v", err)
+	}
 	os.Exit(0)
 }
 

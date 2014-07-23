@@ -6,6 +6,7 @@
             this.$.navigation.items = list;
         },
         show: function() {
+            this.$.searchbox.clear();
             this.$.searchbox.focus();
         },
         watchForChanges: function(onlyRemove) {

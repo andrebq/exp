@@ -1,18 +1,45 @@
 (function(){
+    function splitPath(path) {
+        path = S(path);
+        var lastSep = path.lastIndexOf("/");
+        if (lastSep === (path.length - 1)) {
+            // ends with a /
+            // ignore the final / and do the
+            // split on the directory itself
+            path = path.substring(0, lastSep);
+            lastSep = path.lastIndexOf("/");
+        }
+        var basename = "";
+        var parent = "";
+        switch (lastSep) {
+        case -1:
+            // not found, everything is the basename
+            basename = path;
+            break;
+        case 0:
+            // the last / is on path begin
+            // basename = path.substring(1)
+            if (path === "/") {
+                basename = "";
+            } else {
+                basename = path.substring(1);
+            }
+            break;
+        default:
+            parent = path.substring(0, lastSep + 1);
+            basename = path.substring(lastSep + 1);
+            break;
+        }
+        return { dir: parent, basename: basename };
+    }
+
     this.E = this.E || {};
 
     function compareFileNames(a,b) {
-        var szDiff = a.length - b.length;
-        if (szDiff !== 0) {
-            return szDiff;
-        }
-        var sz = a.length;
-        var codeDiff;
-        for (var i = 0; i < sz; i++) {
-            codeDiff = a.charCodeAt(i) - b.charCodeAt(i);
-            if (codeDiff !== 0) {
-                return codeDiff;
-            }
+        if (a > b) {
+            return 1;
+        } else if (a < b) {
+            return -1;
         }
         return 0;
     }
@@ -85,6 +112,10 @@
             { test: function endsWith(name) {
                 return S(name).endsWith(pattern);
             }},
+            { test: function basenameStartsWith(name) {
+                var parts = splitPath(name);
+                return S(parts.basename).startsWith(pattern);
+            }},
             { test: function walkDirs(name) {
                 var parts = S(name).split('/');
                 var sz = pattern.length;
@@ -98,6 +129,9 @@
                     ok = S(parts[i]).startsWith(pattern.charAt(i))
                 }
                 return ok;
+            }},
+            { test: function isDirName(name) {
+                return S(name).indexOf("/" + pattern + "/") >= 0;
             }},
             { test: function matchAny(name) {
                 return pattern === '*';
@@ -120,19 +154,41 @@
     };
 
     function Fs() {
+        if (!(this instanceof Fs)) {
+            return new Fs();
+        }
         this.prefix = '/fs/';
+    }
+
+    function checkStatusThenResolve(resolve, reject, extra) {
+        return function(result) {
+            result.data = _.extend(extra, result.data);
+            if (result.data.status !== 200) {
+                reject(new E.IO.Data(result, sprintf('%d - %s', result.data.status, result.data.response.toString())));
+            } else {
+                resolve(result);
+            }
+        }
     }
 
     // returns a channel that can be used to receive E.IO.Data object
     //
     // The data will hold the contents of the file loaded from the server
     Fs.prototype.read = function(name) {
-        return E.Xhr.get(URI(this.prefix + name).normalizePath());
+        var that = this;
+        return Q.promise(function(resolve, reject, notify){
+            E.Xhr.get(URI(that.prefix + name).normalizePath())
+                .then(checkStatusThenResolve(resolve, reject, { filename: name }), reject, notify);
+        });
     };
 
     // returns a channel that can be used to receive E.IO.Data object
     Fs.prototype.write = function(name, value) {
-        return E.Xhr.post(URI(this.prefix + name).normalizePath(), value);
+        var that = this;
+        return Q.promise(function(resolve, reject, notify){
+            E.Xhr.post(URI(that.prefix + name).normalizePath(), value)
+                .then(checkStatusThenResolve(resolve, reject, { filename: name }), reject, notify);
+        });
     };
 
     this.E.Fs = Fs;
