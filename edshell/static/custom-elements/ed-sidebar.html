@@ -1,6 +1,7 @@
 <link rel="import" href="../bower_components/polymer/polymer.html">
 <link rel="import" href="../bower_components/core-ajax/core-ajax.html">
 <link rel="import" href="ed-searchbox.html">
+<link rel="import" href="ed-treelist.html">
 <link rel="import" href="ed-navigation.html">
 
 <polymer-element name="ed-sidebar"
@@ -19,10 +20,15 @@
             :host ed-searchbox {
                 width: 100%;
             }
+            #navigation {
+                display: none;
+            }
         </style>
         <core-ajax id="serverContents" url="/fs/{{rootFolder}}?deepread=y&depth=10" on-core-response="{{mergeContents}}" handleAs="text"></core-ajax>
         <section id="root">
             <ed-searchbox throttle="40" id="searchbox"></ed-searchbox>
+            <h1>Folder</h1>
+            <ed-treelist id="treelist"></ed-treelist>
             <ed-navigation id="navigation" maxentries="150"></ed-navigation>
         </section>
     </template>

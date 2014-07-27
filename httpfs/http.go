@@ -17,8 +17,11 @@ type ReadArgs struct {
 	Depth int
 }
 
-func (h *Handler) fileForPath(req *http.Request) (File, error) {
+func (h *Handler) fileForPath(req *http.Request, createIfNotFound bool) (File, error) {
 	toWalk := h.extractPath(req)
+	if createIfNotFound {
+		return OpenOrCreate(h.Root, createIfNotFound, toWalk...)
+	}
 	return Walk(h.Root, toWalk...)
 }
 
@@ -50,7 +53,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *Handler) Write(w http.ResponseWriter, req *http.Request) {
-	file, err := h.fileForPath(req)
+	file, err := h.fileForPath(req, true)
 	if err != nil {
 		log.Printf("Error walking path file: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -72,10 +75,14 @@ func (h *Handler) Write(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *Handler) Read(w http.ResponseWriter, req *http.Request) {
-	file, err := h.fileForPath(req)
+	file, err := h.fileForPath(req, false)
 	if err != nil {
 		log.Printf("Error walking path file: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		if err == ErrNotFound {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
 	} else {
 		args, err := h.readArgs(req)
 		if err != nil {

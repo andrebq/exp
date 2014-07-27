@@ -13,6 +13,8 @@ var (
 	ErrCannotRead       = errors.New("cannot read")
 	ErrCannotWriteToDir = errors.New("cannot write to directory")
 	ErrCannotTruncate = errors.New("file don't allow truncate")
+	ErrCannotCreate = errors.New("cannot create the file")
+	ErrNotFound = errors.New("file not found")
 )
 
 type Info struct {
@@ -68,6 +70,7 @@ type File interface {
 	Reader() (io.ReadCloser, error)
 	Writer() (io.WriteCloser, error)
 	Childs() ([]string, error)
+	Create(name string, isDir bool) (File, error)
 }
 
 // Represent a actual disk file
@@ -157,6 +160,29 @@ func ReadFileTo(out io.Writer, in File) error {
 	return nil
 }
 
+func OpenOrCreate(root File, createParents bool, path ...string) (File, error) {
+	var err error
+	var prevRoot File
+	for idx, v := range path {
+		prevRoot = root
+		if root, err = root.Open(v); err == nil {
+			continue
+		} else {
+			if err == ErrNotFound && createParents {
+				// try to create this file or directory
+				root, err = prevRoot.Create(v, idx != len(path) - 1)
+				if err != nil {
+					// unable to create abort
+					return nil, err
+				}
+				return root, err
+			}
+			return nil, err
+		}
+	}
+	return root, nil
+}
+
 func Walk(root File, path ...string) (File, error) {
 	var err error
 	for _, v := range path {
@@ -219,6 +245,9 @@ func (df *DiskFile) Info() Info {
 
 func (df *DiskFile) Open(name string) (File, error) {
 	info, err := os.Stat(filepath.Join(df.abs, name))
+	if os.IsNotExist(err) {
+		return nil, ErrNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -261,4 +290,25 @@ func (df *DiskFile) Truncate() error {
 		defer file.Close()
 	}
 	return err
+}
+
+func (df *DiskFile) Create(name string, isdir bool) (File, error) {
+	if !df.isdir {
+		return nil, ErrCannotCreate
+	} else {
+		if isdir {
+			err := os.Mkdir(filepath.Join(df.abs, name), 0644)
+			if err != nil {
+				return nil, err
+			}
+			return df.Open(name)
+		} else {
+			fd, err := os.OpenFile(filepath.Join(df.abs, name), os.O_CREATE | os.O_EXCL, 0644)
+			if err != nil {
+				return nil, err
+			}
+			fd.Close()
+			return df.Open(name)
+		}
+	}
 }

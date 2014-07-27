@@ -27,6 +27,7 @@
         mergeContents: function(ev){
             var files = S(this.$.serverContents.response).trim().split("\n");
             this.fileList.merge(files);
+            this.$.treelist.tree = this.fileList.tree();
             this.fuzzySet.resetItems(this.fileList.items());
         },
         attached: function(){

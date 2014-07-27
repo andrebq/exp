@@ -44,15 +44,92 @@
         return 0;
     }
 
+    function Filetree() {
+        if (!(this instanceof Filetree)) {
+            return new Filetree();
+        }
+        this.root = new Filetree.Node("", null);
+    }
+
+    Filetree.prototype.addPaths = function(listOfPaths) {
+        if (listOfPaths === "") {
+            return;
+        }
+        var that = this;
+        if (!_.isArray(listOfPaths)) {
+            listOfPaths = [ listOfPaths ];
+        }
+        _.each(listOfPaths, function(e){
+            that.root.addParts(S(e).split("/"));
+        });
+    };
+
+    Filetree.Node = function(name, parent) {
+        if (!(this instanceof Filetree.Node)) {
+            return new Filetree.Node(name, parent);
+        }
+        this.parent = parent;
+        this.name = name;
+        this.expanded = false;
+        this.childs = [];
+    };
+
+    Filetree.Node.prototype.absPath = function() {
+        if (!this.$absPath) {
+            if (this.parent) {
+                this.$absPath = this.parent.absPath() +"/" + this.name;
+            } else {
+                this.$absPath = this.name;
+            }
+        }
+        return this.$absPath;
+    };
+
+    Filetree.Node.prototype.addParts = function(parts) {
+        if (parts.length === 0) {
+            return this;
+        }
+        var childs = this.childs;
+        var sz = childs.length;
+        for(var i = 0; i < sz; i++) {
+            if (this.childs[i].name === parts[0]) {
+                parts.shift();
+                return this.childs[i].addParts(parts);
+            }
+        }
+
+        // didn't found the childs inside my path
+        // then create a new child and add the rest to it
+        var child = new Filetree.Node(parts[0], this);
+        parts.shift();
+        this.childs.push(child);
+        return child.addParts(parts);
+    };
+
+    Filetree.Node.prototype.toString = function() {
+        if (this.childs.length == 0) {
+            // a file
+            return this.name;
+        } else if (this.childs.length > 0) {
+            // a directory
+            return this.name + "/";
+        }
+    };
+
     function Filelist() {
         if (!(this instanceof Filelist)) {
             return new Filelist();
         }
         this.$entries = [];
+        this.$tree = new Filetree();
     };
 
     Filelist.prototype.contains = function(value) {
         return _(this.$entries).contains(value);
+    };
+
+    Filelist.prototype.tree = function() {
+        return this.$tree;
     };
 
     Filelist.prototype.items = function() {
@@ -72,8 +149,9 @@
             }
             if (!that.contains(val)) {
                 pending.push(val);
+                this.$tree.addPaths(val);
             }
-        });
+        }.bind(this));
         this.$entries = this.$entries.concat(pending);
         this.$entries.sort(compareFileNames);
     };
@@ -131,7 +209,7 @@
                 return ok;
             }},
             { test: function isDirName(name) {
-                return S(name).indexOf("/" + pattern + "/") >= 0;
+                return S(name).indexOf("/" + pattern) >= 0;
             }},
             { test: function matchAny(name) {
                 return pattern === '*';
