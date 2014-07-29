@@ -20,9 +20,6 @@
             :host ed-searchbox {
                 width: 100%;
             }
-            #navigation {
-                display: none;
-            }
         </style>
         <core-ajax id="serverContents" url="/fs/{{rootFolder}}?deepread=y&depth=10" on-core-response="{{mergeContents}}" handleAs="text"></core-ajax>
         <section id="root">

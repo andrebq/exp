@@ -2,27 +2,22 @@
     Polymer('ed-sidebar', {
         rootFolder:"./",
         searchString: "",
+        $toggleTreelist: function(show) {
+            if (show) {
+                E.Css(this.$.treelist).restore('display');
+            } else {
+                E.Css(this.$.treelist).setWithBackup('display', 'none');
+            }
+        },
         showItems: function(list) {
             this.$.navigation.items = list;
+        },
+        created: function() {
+            this.$subs = new E.Rx.Util.SubManager();
         },
         show: function() {
             this.$.searchbox.clear();
             this.$.searchbox.focus();
-        },
-        watchForChanges: function(onlyRemove) {
-            if (this.subscription) {
-                this.subscription.dispose();
-            }
-            if (onlyRemove) { return; }
-            var that = this;
-            this.subscription = Rx.Observable.fromEvent(this.$.searchbox, "change")
-                .map(function(e){
-                    return e.detail.value;
-                })
-                .map(this.fuzzySet.filter.bind(this.fuzzySet))
-                .subscribe(function(list){
-                    that.showItems(list);
-                });
         },
         mergeContents: function(ev){
             var files = S(this.$.serverContents.response).trim().split("\n");
@@ -31,10 +26,30 @@
             this.fuzzySet.resetItems(this.fileList.items());
         },
         attached: function(){
-            this.watchForChanges();
+            this.$subs.add('searchbox-change', Rx.Observable.fromEvent(this.$.searchbox, "change")
+                .pluck('detail').pluck('value')
+                .filter(E.Rx.asBoolean)
+                .map(E.Rx.exec(function(val) {
+                    this.$toggleTreelist(!E.Rx.asBoolean(val));
+                }.bind(this)))
+                .map(this.fuzzySet.filter.bind(this.fuzzySet))
+                .subscribe(function(list){
+                    this.showItems(list);
+                }.bind(this)));
+            this.$subs.add('search-completed', Rx.Observable.fromEvent(this.$.searchbox, 'search-completed')
+                .pluck('detail').pluck('value')
+                .subscribe(function(value){
+                    var items = this.fuzzySet.filter(value);
+                    if (items.length > 0) {
+                        this.fire('open-file', { filename: items[0] });
+                    }
+                }.bind(this)));
+            this.$subs.add("create-new-file", Rx.Observable
+                .fromEvent(this.$.treelist, "create-new-file")
+                .subscribe(console.log.bind(console)));
         },
         detached: function() {
-            this.watchForChanges(true);
+            this.$subs.dispose();
         },
         ready: function(){
             this.fileList = new E.Fs.Filelist();

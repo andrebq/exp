@@ -1,4 +1,14 @@
 (function(){
+    function nodeIsVisible(node) {
+        if (!node) { return true; }
+        if (_.isArray(node.isVisible)) {
+            return node.isVisible();
+        } else {
+            return node.style.display !== 'none' &&
+                node.style.display !== 'hidden';
+        }
+    }
+
     function setFocus(el) {
         if (_.isFunction(el.focus, 'focus')) {
             el.focus();
@@ -164,27 +174,32 @@
             toast.show();
         },
         attached: function() {
-            this.$subs.add("editor-focused", Rx.Observable.fromEvent(this, 'editor-focused')
+            this.$subs.add("editor-focused", Rx.Observable
+                .fromEvent(this, 'editor-focused')
                 .pluck('target')
                 .filter(E.Rx.distinctFromLast())
                 .subscribe(this.saveLastFocusedEditor.bind(this)));
-            this.$subs.add("editor-created", Rx.Observable.fromEvent(this, 'editor-created')
+            this.$subs.add("editor-created", Rx.Observable
+                .fromEvent(this, 'editor-created')
                 .pluck('target')
                 .subscribe(setFocus));
-            this.$subs.add("editor-save", Rx.Observable.fromEvent(this, 'editor-save')
+            this.$subs.add("editor-save", Rx.Observable
+                .fromEvent(this, 'editor-save')
                 .pluck('target')
                 .subscribe(this.$handleFileSave.bind(this)));
-            this.$subs.add("window-f2", Rx.Observable.fromEvent(window, 'keyup')
+            this.$subs.add("window-f2", Rx.Observable
+                .fromEvent(window, 'keyup')
                 .pluck('which')
                 .filter(E.Rx.isKeyCode(E.Rx.Keycodes.F2))
+                .filter(this.$sidebarIsHidden.bind(this))
                 .subscribe(function(key){
                     this.toggleSideBar(true);
                 }.bind(this)));
-            this.$subs.add("search-completed", Rx.Observable.fromEvent(this, "search-completed")
+            this.$subs.add("open-file", Rx.Observable
+                .fromEvent(this, "open-file")
                 .pluck('detail')
                 .map(E.Rx.exec(function() { this.toggleSideBar(false); }.bind(this)))
-                .filter(function(value){ return value.status === "confirm"; })
-                .pluck('value')
+                .pluck('filename')
                 .subscribe(this.$handleOpenFile.bind(this)));
             this.$subs.add("window-resize", Rx.Observable
                 .fromEvent(window, 'resize')
@@ -198,6 +213,12 @@
             this.$subs.add("dialog-opened", Rx.Observable
                 .fromEvent(window, "dialog-opened")
                 .subscribe(this.$removeFocusFromEditor.bind(this)));
+            this.$subs.add("close-sidebar", Rx.Observable
+                .fromEvent(window, "keyup")
+                .pluck('which')
+                .filter(E.Rx.isKeyCode([E.Rx.Keycodes.ESC]))
+                .filter(E.Rx.not(this.$sidebarIsHidden.bind(this)))
+                .subscribe(function(){ this.toggleSideBar(false); }.bind(this)));
             var nodes = this.$getNodes();
             // the side bar start hidden
             hideNodes([nodes.sidebar]);
@@ -206,6 +227,9 @@
                 this.handleResize(E.Rx.dimension(window));
             }.bind(this), 1);
             removePaddingFromParent(this);
+        },
+        $sidebarIsHidden: function() {
+            return !nodeIsVisible(this.$getNodes().sidebar);
         },
         handleResize: function(newsize) {
             if (newsize === undefined) {

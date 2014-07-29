@@ -64,6 +64,25 @@
         });
     };
 
+    Filetree.prototype.walk = function(path) {
+        if (!_.isArray(path)) {
+            // split on /
+            path = S(path).split('/');
+        }
+        var root = this.root;
+        var found = false;
+        _.each(path, function(p){
+            if (!root) { return; }
+
+            p = S(p).trim();
+            if (p.length === 0) {
+                return;
+            }
+            root = root.findChild(p.toString());
+        });
+        return root;
+    };
+
     Filetree.Node = function(name, parent) {
         if (!(this instanceof Filetree.Node)) {
             return new Filetree.Node(name, parent);
@@ -77,18 +96,36 @@
     Filetree.Node.prototype.absPath = function() {
         if (!this.$absPath) {
             if (this.parent) {
-                this.$absPath = this.parent.absPath() +"/" + this.name;
+                this.$absPath = this.parent.absPath() + this.name;
             } else {
                 this.$absPath = this.name;
             }
+            if (this.childs.length > 0) {
+                this.$absPath += "/";
+            }
         }
         return this.$absPath;
+    };
+
+    Filetree.Node.prototype.findChild = function(name) {
+        var child = null;
+        _.each(this.childs, function(c){
+            if (c.name === name) {
+                child = c;
+            }
+        });
+        return child;
     };
 
     Filetree.Node.prototype.addParts = function(parts) {
         if (parts.length === 0) {
             return this;
         }
+        if (S(parts[0]).trim().length === 0) {
+            parts.shift();
+            return this.addParts(parts);
+        }
+
         var childs = this.childs;
         var sz = childs.length;
         for(var i = 0; i < sz; i++) {
@@ -107,13 +144,17 @@
     };
 
     Filetree.Node.prototype.toString = function() {
-        if (this.childs.length == 0) {
-            // a file
-            return this.name;
-        } else if (this.childs.length > 0) {
+        if (this.isDir()) {
             // a directory
             return this.name + "/";
+        } else {
+            // a file
+            return this.name;
         }
+    };
+
+    Filetree.Node.prototype.isDir = function() {
+        return this.childs.length > 0;
     };
 
     function Filelist() {

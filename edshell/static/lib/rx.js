@@ -101,10 +101,27 @@
                 return k === expected;
             }
         },
+        tagNameIs: function(name) {
+            return function(ev) {
+                return ev.target.tagName === name;
+            };
+        },
         not: function(fn) {
             return function(val) {
                 return !fn(val);
             }
+        },
+        asBoolean: function(val) {
+            return !!val;
+        },
+        getAttribute: function(attrName) {
+            return function(node) {
+                if (node && _.isFunction(node.getAttribute)) {
+                    return node.getAttribute(attrName);
+                } else {
+                    return null;
+                }
+            };
         },
         Util: {
             SubManager: SubscriptionManager,

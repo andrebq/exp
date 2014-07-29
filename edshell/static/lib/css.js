@@ -28,7 +28,7 @@
     CssWriter.prototype.setWithBackup = function(name, value) {
         var backup = this.$backup();
         if (backup && !backup[name]) {
-            backup[name] = this.$el.get(name);
+            backup[name] = this.get(name);
         }
         this.set(name, value);
     };

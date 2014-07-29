@@ -24,25 +24,22 @@ Polymer('ed-searchbox', {
         this.$submng.dispose(['keyup', 'exit-search']);
         if (onlyRemove) { return; }
         var that = this;
-        this.$.searchbox.addEventListener('keyup', function(e){
-            //console.log(e, e.target, e.target.value);
-        });
         this.$submng.add('keyup', Rx.Observable.fromEvent(this.$.searchbox, 'keyup')
-            .pluck('target').pluck('value')
-            .filter(E.Rx.not(E.Rx.isKeyCode([E.Rx.Keycodes.F2, E.Rx.Keycodes.ENTER, E.Rx.Keycodes.ESC])))
+            .filter(function(e){
+                if (e.which === E.Rx.Keycodes.ENTER) {
+                    // should stop here
+                    E.Rx.killEvent(e);
+                    this.$searchCompleted(completeStatusFromKeycode(e.which));
+                    return false;
+                }
+                return true;
+            }.bind(this))
+            .map(function(ev){ return ev.target.value; })
             .filter(E.Rx.distinctFromLast())
             .throttle(this.throttle)
             .subscribe(function(value){
                 that.fire("change", { value: value} );
             }));
-
-        this.$submng.add('exit-search', Rx.Observable.fromEvent(this.$.searchbox, 'keyup')
-            .pluck('which')
-            .filter(E.Rx.isKeyCode([E.Rx.Keycodes.F2, E.Rx.Keycodes.ENTER, E.Rx.Keycodes.ESC]))
-            .throttle(this.throttle)
-            .subscribe(function(value){
-                this.$searchCompleted(completeStatusFromKeycode(value));
-            }.bind(this)));
     },
     $searchCompleted: function(status) {
         var detail = {
