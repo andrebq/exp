@@ -509,12 +509,12 @@ func (s *Server) FetchHeaders(out []Message, receiver string, receivedAt time.Ti
 func (s *Server) doReadMessage(msg *Message) (*Message, error) {
 	data, err := s.BlobStore.GetData(nil, msg.Mid)
 	if err != nil {
-		msg.invalidBody = false
+		msg.invalidBody = true
 		return msg, err
 	}
 	msg.Body, err = url.ParseQuery(string(data))
 	if err != nil {
-		msg.invalidBody = false
+		msg.invalidBody = true
 	}
 	return msg, err
 }
